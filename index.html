@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>全网今日热榜</title>
+<meta name="description" content="聚合微博、百度、知乎、B站、抖音、头条等 40+ 平台实时热榜，一站看尽全网热点。">
+<meta name="keywords" content="热榜,热搜,微博热搜,百度热搜,知乎热榜,抖音热点,今日头条,GitHub趋势">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23425AEF'/%3E%3Cpath d='M9 22V10h3.2v9.3H19V22H9Zm8.6-3.4 2.1-2.1a4.6 4.6 0 0 0 0-6.6l2.2-2.2a7.7 7.7 0 0 1 0 11L19.8 21Z' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+:root{
+  --theme:#425AEF; --theme-soft:rgba(66,90,239,.10);
+  --bg:#f4f6fb; --card:#fff; --text:#1f2430; --muted:#8990a3;
+  --border:#e8ebf2; --hover:#f7f9ff; --shadow:0 1px 3px rgba(22,32,72,.06),0 6px 18px rgba(22,32,72,.05);
+  --ok:#12b76a; --warn:#f79009; --err:#f04438;
+
+  /* ---------- 自适应布局 ----------
+     思路是「先定列数，再反推内容区宽度」：--cols 由下方断点按分辨率提升，
+     内容区宽度 --shell 是它的函数，卡片铺不满时才整体居中留白。
+     这样改一个 --cols，顶栏和内容区会永远对齐，不需要两处各维护一个宽度。 */
+  --gutter:clamp(12px,1.6vw,32px);   /* 左右留白，随视口平滑过渡 */
+  --gap:14px;                        /* 卡片间距 */
+  --cols:1;                          /* 当前列数 */
+  --card-max:640px;                  /* 单卡最大宽度，超出后整体居中 */
+  --shell:calc(var(--cols)*var(--card-max) + (var(--cols) - 1)*var(--gap) + 2*var(--gutter));
+}
+/* 列数断点。每个分界点都按「刚跨过时单卡仍有 ~330px 可读宽度」反推的：
+   太窄标题会被 ellipsis 吃掉，太宽则行数浪费。 */
+@media (min-width:620px){:root{--cols:2;--card-max:430px;--gap:12px}}
+@media (min-width:1060px){:root{--cols:3;--card-max:400px;--gap:14px}}
+@media (min-width:1420px){:root{--cols:4}}
+@media (min-width:1780px){:root{--cols:5}}
+@media (min-width:2120px){:root{--cols:6}}
+@media (min-width:2460px){:root{--cols:7}}
+html[data-theme="dark"]{
+  --bg:#0f1220; --card:#181c2b; --text:#e6e9f2; --muted:#8b93ab;
+  --border:#262c40; --hover:#1e2436; --shadow:0 1px 3px rgba(0,0,0,.4),0 8px 22px rgba(0,0,0,.28);
+  --theme-soft:rgba(99,122,255,.16);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;transition:background .2s,color .2s}
+a{color:inherit;text-decoration:none}
+
+/* ---------- 顶栏 ---------- */
+.topbar{position:sticky;top:0;z-index:50;background:var(--card);
+  border-bottom:1px solid var(--border);backdrop-filter:saturate(180%) blur(8px)}
+.topbar-inner{max-width:var(--shell);margin:0 auto;padding:10px var(--gutter);display:flex;align-items:center;gap:14px}
+.brand{display:flex;align-items:center;gap:8px;font-size:17px;font-weight:700;letter-spacing:.3px;white-space:nowrap}
+.brand .dot{width:9px;height:9px;border-radius:50%;background:var(--theme);box-shadow:0 0 0 4px var(--theme-soft)}
+.search-wrap{position:relative;flex:1;max-width:340px;min-width:120px}
+.search-wrap svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted)}
+.search{width:100%;padding:8px 12px 8px 34px;border:1px solid var(--border);border-radius:9px;
+  background:var(--bg);color:var(--text);font-size:13px;outline:none;transition:.15s}
+html[data-theme="dark"] .search{background:#12162a}
+.search:focus{border-color:var(--theme);background:var(--card);box-shadow:0 0 0 3px var(--theme-soft)}
+.meta{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.status{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);white-space:nowrap}
+.pulse{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:none}
+.pulse.warn{background:var(--warn)} .pulse.err{background:var(--err)}
+.pulse.busy{background:var(--theme);animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.25}}
+.btn{background:var(--theme);color:#fff;border:0;border-radius:8px;padding:7px 14px;
+  font-size:13px;cursor:pointer;transition:.15s;font-weight:500}
+.btn:hover{filter:brightness(1.08)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.btn-mini{background:var(--hover);color:var(--text);border:1px solid var(--border);border-radius:8px;
+  padding:6px 11px;font-size:12.5px;cursor:pointer;transition:.15s;white-space:nowrap}
+.btn-mini:hover{border-color:var(--theme);color:var(--theme)}
+.btn-danger{background:transparent;color:var(--err);border:1px solid var(--err);border-radius:8px;
+  padding:7px 14px;font-size:13px;cursor:pointer}
+.switch{position:relative;display:inline-block;width:38px;height:21px;flex:none}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;inset:0;background:#c9cfdd;border-radius:21px;cursor:pointer;transition:.2s}
+.slider:before{content:"";position:absolute;width:16px;height:16px;left:2.5px;top:2.5px;
+  background:#fff;border-radius:50%;transition:.2s}
+.switch input:checked + .slider{background:var(--theme)}
+.switch input:checked + .slider:before{transform:translateX(17px)}
+
+/* ---------- 主体 ---------- */
+.container{max-width:var(--shell);margin:0 auto;padding:18px var(--gutter)}
+.board-grid{display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));gap:var(--gap);align-items:start}
+.board{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 15px;
+  box-shadow:var(--shadow);transition:transform .15s,box-shadow .15s}
+.board:hover{transform:translateY(-2px);box-shadow:0 4px 10px rgba(22,32,72,.08),0 12px 28px rgba(22,32,72,.08)}
+.board.p-hidden{display:none}
+.board-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:9px;border-bottom:1px solid var(--border)}
+.board-head h2{margin:0;font-size:14.5px;font-weight:600;display:flex;align-items:center;gap:7px;flex:1;min-width:0}
+.p-ico{width:17px;height:17px;border-radius:4px;object-fit:contain;flex:none}
+.more-btn{font-size:12px;color:var(--muted);padding:3px 7px;border-radius:6px;white-space:nowrap;cursor:pointer}
+.more-btn:hover{background:var(--hover);color:var(--theme)}
+.list{margin:0;padding:0;list-style:none}
+.item{display:flex;align-items:baseline;gap:9px;padding:5.5px 0;border-radius:6px}
+.item:hover{background:var(--hover)}
+.item:hover .title{color:var(--theme)}
+.rank{flex:none;width:19px;height:19px;line-height:19px;text-align:center;border-radius:5px;
+  font-size:11.5px;font-weight:700;background:var(--hover);color:var(--muted)}
+.rank-1{background:#fef3f2;color:#f04438} .rank-2{background:#fff4ed;color:#f2750f}
+.rank-3{background:#fffaeb;color:#dc9300}
+html[data-theme="dark"] .rank-1{background:rgba(240,68,56,.18)} 
+html[data-theme="dark"] .rank-2{background:rgba(242,117,15,.18)}
+html[data-theme="dark"] .rank-3{background:rgba(220,147,0,.18)}
+.title{flex:1;font-size:13.3px;line-height:1.5;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;transition:color .12s;min-width:0}
+.hot{flex:none;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.empty{padding:14px 0;color:var(--muted);font-size:12.5px;text-align:center}
+.foot{text-align:center;color:var(--muted);font-size:12.5px;padding:26px 12px 34px}
+
+/* ---------- 弹窗 ---------- */
+.modal{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:20px}
+.modal[hidden]{display:none}
+.modal-mask{position:absolute;inset:0;background:rgba(16,20,35,.42);backdrop-filter:blur(2px)}
+.modal-panel{position:relative;background:var(--card);border:1px solid var(--border);border-radius:14px;
+  width:100%;max-width:520px;max-height:86vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.24)}
+.modal-wide{max-width:680px}
+.modal-settings{max-width:80%}
+.modal-head{display:flex;align-items:center;padding:15px 18px;border-bottom:1px solid var(--border)}
+.modal-head h3{margin:0;font-size:15px;flex:1;display:flex;align-items:center;gap:9px}
+.modal-x{margin-left:auto;background:none;border:0;font-size:22px;line-height:1;color:var(--muted);cursor:pointer;padding:0 4px}
+.modal-x:hover{color:var(--text)}
+.modal-body{padding:16px 18px;overflow-y:auto}
+.modal-foot{padding:13px 18px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:10px}
+.set-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.set-row:last-child{border-bottom:0}
+.set-row > span:first-child{flex:1;font-size:13.5px}
+.set-row select,.set-row input[type=text]{background:var(--bg);color:var(--text);border:1px solid var(--border);
+  border-radius:7px;padding:6px 9px;font-size:13px;outline:none;max-width:230px}
+.set-row select:focus,.set-row input[type=text]:focus{border-color:var(--theme)}
+.set-tip{color:var(--muted);font-size:12px;margin:8px 0 12px;line-height:1.65}
+.plat-list{list-style:none;margin:0;padding:0;max-height:52vh;overflow-y:auto}
+.plat-item{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:8px;
+  border:1px solid transparent;cursor:grab;background:var(--hover);margin-bottom:5px;font-size:13px}
+.plat-item:hover{border-color:var(--theme)}
+.plat-item.dragging{opacity:.45}
+.plat-item.drag-over{border-top:2px solid var(--theme)}
+.plat-item .p-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plat-item .drag{color:var(--muted);cursor:grab;user-select:none}
+.plat-item .p-actions{display:flex;gap:3px;flex:0 0 auto}
+.plat-item .mv{width:26px;height:26px;border:1px solid var(--border);background:var(--bg);color:var(--text);
+  border-radius:6px;cursor:pointer;font-size:13px;line-height:1;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.plat-item .mv:hover:not(:disabled){border-color:var(--theme);color:var(--theme)}
+.plat-item .mv:disabled{opacity:.3;cursor:not-allowed}
+/* 详情弹窗内的榜单 */
+#detailList{list-style:none;margin:0;padding:0;max-height:62vh;overflow-y:auto}
+#detailList .item{padding:7px 6px}
+#detailList .title{white-space:normal}
+@media (max-width:640px){
+  .topbar-inner{flex-wrap:wrap;gap:9px;padding:9px var(--gutter)}
+  .search-wrap{order:3;max-width:none;flex-basis:100%}
+  .meta{margin-left:auto}
+  .container{padding:14px var(--gutter)}
+  .board{padding:12px 13px}
+  .foot{padding:20px 12px 28px}
+}
+</style>
+
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand"><span class="dot"></span>全网热榜</div>
+    <span class="search-wrap">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="searchInput" class="search" placeholder="搜索热榜标题…" autocomplete="off">
+    </span>
+    <div class="meta">
+      <span class="status"><i id="statusDot" class="pulse"></i><span id="statusText">加载中…</span></span>
+      <label class="switch" title="开启后按设定间隔自动拉取最新数据">
+        <input type="checkbox" id="autoToggle" checked><span class="slider"></span>
+      </label>
+      <span class="status" style="font-size:11.5px">自动</span>
+      <button id="refreshBtn" class="btn-mini">↻ 刷新</button>
+      <button id="settingsBtn" class="btn-mini">⚙ 设置</button>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <div class="board-grid" id="grid"></div>
+</main>
+
+<footer class="foot">数据来自各平台公开接口，仅供学习交流使用 · 设置里可配置自动更新与代理</footer>
+
+<!-- 详情弹窗 -->
+<div id="detailModal" class="modal" hidden>
+  <div class="modal-mask"></div>
+  <div class="modal-panel modal-wide">
+    <div class="modal-head">
+      <h3><img id="detailIcon" class="p-ico" src="" alt=""><span id="detailTitle">详情</span></h3>
+      <button class="modal-x" data-close="detailModal">×</button>
+    </div>
+    <div class="modal-body"><ol class="list" id="detailList"></ol></div>
+  </div>
+</div>
+
+<!-- 设置弹窗 -->
+<div id="settingsModal" class="modal" hidden>
+  <div class="modal-mask"></div>
+  <div class="modal-panel modal-settings">
+    <div class="modal-head"><h3>个性化设置</h3><button class="modal-x" data-close="settingsModal">×</button></div>
+    <div class="modal-body">
+      <div class="set-row"><span>深色模式</span><label class="switch"><input type="checkbox" id="themeToggle"><span class="slider"></span></label></div>
+      <div class="set-row"><span>自动更新间隔</span>
+        <select id="intervalSel">
+          <option value="5">5 分钟</option><option value="10">10 分钟</option>
+          <option value="30">30 分钟</option><option value="60">1 小时</option>
+        </select>
+      </div>
+      <div class="set-row"><span>每板块显示</span>
+        <select id="limitSel">
+          <option value="10">10 条</option><option value="15">15 条</option>
+          <option value="20">20 条</option><option value="50">全部</option>
+        </select>
+      </div>
+      <div class="set-row"><span>板块图标</span>
+        <select id="iconSel">
+          <option value="auto">内置源站图标（推荐，离线可用）</option>
+          <option value="badge">品牌色圆角块</option>
+          <option value="favicon">网站原始图标（实时联网）</option>
+          <option value="none">不显示图标</option>
+        </select>
+      </div>
+      <div class="set-row"><span>CORS 代理前缀</span>
+        <input type="text" id="proxyInput" placeholder="留空=仅用免跨域源" style="width:250px">
+      </div>
+      <p class="set-tip">
+        多数平台官方接口不带跨域头，浏览器直连拿不到数据（这就是原版需要 PHP 的原因）。<br>
+        填入代理前缀后即可在浏览器内实时拉取，例如：<br>
+        · <code>https://你的worker.workers.dev/?url=</code>（推荐，附带的 proxy-worker.js 可一键部署）<br>
+        · <code>https://api.allorigins.win/raw?url=</code>（公共）<br>
+        未填代理时，仍会自动更新已开放跨域的平台（微博/头条/抖音/GitHub）。
+      </p>
+      <div class="set-row"><span style="flex:1">调整顺序：每行右侧 ⏫↑↓⏬ 按钮，或拖拽 ⠿ 手柄；右侧开关控制显隐</span></div>
+      <div style="padding:8px 0 10px"><input type="text" id="orderFilter" placeholder="筛选板块名 / 拼音 key…" style="width:100%;box-sizing:border-box" autocomplete="off"></div>
+      <ul id="platList" class="plat-list"></ul>
+      <div class="set-row" style="border-bottom:0">
+        <span style="flex:1">
+          <button id="resetOrderBtn" class="btn-mini">恢复默认排序</button>
+          <button id="copyOrderBtn" class="btn-mini" style="margin-left:7px">复制当前排序</button>
+        </span>
+      </div>
+      <p class="set-tip" id="orderTip" style="margin-top:0">
+        「复制当前排序」会把上面这份顺序生成一段数组并复制到剪贴板：把它粘进 <code>index.html</code>
+        的 <code>DEFAULT_ORDER</code>、再把紧跟其后的 <code>ORDER_VERSION</code> 加 1，
+        别人打开（包括你自己换台电脑）就都是这个顺序了。
+      </p>
+    </div>
+    <div class="modal-foot">
+      <button id="resetBtn" class="btn-danger">重置设置</button>
+      <div style="display:flex;gap:9px">
+        <button id="testBtn" class="btn-mini">测试代理</button>
+        <button id="settingsDone" class="btn">完成</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 数据快照：由 update.py 生成。
+     这里刻意用 script 标签而非 fetch 引入数据，是因为 file:// 协议下
+     fetch(...) 读本地文件会被同源策略拦截，而 script 标签引用不受此限制，
+     所以双击本文件即可看到数据，无需临时起服务器。 -->
+<script src="hot-data.js"></script>
+<script>
+(function () {
+  'use strict';
+  var STORE = 'rebang_settings_v1';
+  var CACHE = 'rebang_cache_v1';
+
+  // ============ 浏览器端可用数据源 ============
+  // 设计要点：不要让页面和 update.py 各维护一份 42 项的映射表 —— 两边手写必然失配。
+  // 这里只登记「有专属源」的少数平台，其余一律按通用规则走 uapis.cn（type 即 pkey）。
+  // 以后在 update.py 里新增平台，页面自动生成对应源，零同步成本。
+  //
+  // cors:true  = 接口自带跨域响应头，浏览器可直接 fetch
+  // cors:false = 无跨域头，必须走代理（设置里的「CORS 代理前缀」）
+  // p          = 解析器名称
+  var SPECIAL_SOURCES = {
+    weibo: [
+      { t: 'viki', cors: true, p: 'viki', url: 'https://60s-api.viki.moe/v2/weibo' },
+      { t: 'official', cors: false, p: 'weibo', url: 'https://weibo.com/ajax/side/hotSearch' }
+    ],
+    toutiao: [
+      { t: 'viki', cors: true, p: 'viki', url: 'https://60s-api.viki.moe/v2/toutiao' },
+      { t: 'official', cors: false, p: 'toutiao', url: 'https://www.toutiao.com/hot-event/hot-board/?origin=toutiao_pc' }
+    ],
+    douyin: [
+      { t: 'viki', cors: true, p: 'viki', url: 'https://60s-api.viki.moe/v2/douyin' },
+      { t: 'official', cors: false, p: 'douyin', url: 'https://www.iesdouyin.com/web/api/v2/hotsearch/billboard/word/' }
+    ],
+    github: [{ t: 'official', cors: true, p: 'github', url: ghUrl() }],
+    baidu: [{ t: 'official', cors: false, p: 'baidu', url: 'https://top.baidu.com/api/board?platform=wise&tab=realtime' }],
+    bilibili: [{ t: 'official', cors: false, p: 'bilibili', url: 'https://api.bilibili.com/x/web-interface/popular?ps=30&pn=1' }]
+  };
+
+  // 通用兜底：pkey 直接当 uapis.cn 的 type（与 update.py 保持一致）
+  function getSources(pkey) {
+    if (SPECIAL_SOURCES[pkey]) return SPECIAL_SOURCES[pkey];
+    return [{
+      t: 'uapis', cors: false, p: 'uapis',
+      url: 'https://uapis.cn/api/v1/misc/hotboard?type=' + encodeURIComponent(pkey)
+    }];
+  }
+
+  function ghUrl() {
+    var d = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10);
+    return 'https://api.github.com/search/repositories?q=created:>' + d + '+stars:>200&sort=stars&order=desc&per_page=30';
+  }
+
+  // ============ 工具 ============
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // ============ 图标 ============
+  // 为什么不再直接引用各站 favicon：
+  //   实测 42 个平台的 favicon 里，混着 584KB 的超大 ico、返回 HTML 错误页的、
+  //   以及多个平台返回同一张占位图的 —— 加上防盗链与网络波动，就成了"图标时有时无"。
+  //   改为内置生成 SVG 徽标：不发任何外部请求，必定显示、离线可用、风格统一。
+  //   想用真实 favicon 可在设置里切换（失败会自动回退到徽标，不会空白）。
+  
+
+/* ICON_MAP:BEGIN */
+  var ICON_MAP = {
+    '36kr': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%232f85fc%22 fill-rule=%22evenodd%22 d=%22M4 6L6 5L8 5L12 5L13 6L13 32L14 34L17 30L30 6L34 5L38 5L39 6L27 28L27 30L27 34L38 54L39 56L38 57L32 57L30 56L22 43L20 42L12 56L6 57L4 56L3 52L3 8ZM46 32L48 28L52 25L58 25L59 26L59 32L58 33L56 33L53 36L53 56L52 57L46 57L45 56L45 36Z%22/></svg>',
+    '51cto': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23e31136%22 fill-rule=%22evenodd%22 d=%22M-1 2L2 -1L60 -1L63 2L63 60L60 63L2 63L-1 60ZM7 10L10 7L32 7L35 10L35 18L34 19L20 19L19 20L20 21L30 21L32 23L34 23L35 24L35 26L37 28L37 30L39 32L39 42L37 44L37 46L28 55L16 55L7 46L7 38L8 37L18 37L19 38L19 44L22 47L25 44L25 30L24 29L22 29L18 33L8 33L7 32ZM37 20L40 17L42 17L52 7L54 7L55 8L55 52L54 53L44 53L43 52L43 24L42 23L40 23Z%22/><path fill=%22%23fefdfd%22 fill-rule=%22evenodd%22 d=%22M9 12L10 11L32 11L33 12L33 16L32 17L18 17L17 18L17 22L18 23L30 23L35 28L35 46L30 51L28 51L26 53L18 53L16 51L14 51L11 48L11 46L9 44L9 40L10 39L16 39L17 40L17 44L20 47L26 47L27 46L27 30L24 27L20 27L19 28L19 30L18 31L10 31L9 30ZM41 20L52 9L53 10L53 50L52 51L46 51L45 50L45 22L44 21L42 21Z%22/><path fill=%22%23ec647c%22 fill-rule=%22evenodd%22 d=%22M7 10L8 9L9 10L9 30L10 31L18 31L19 32L18 33L10 33L7 30ZM17 54L18 53L26 53L27 54L26 55L18 55ZM19 18L20 17L32 17L33 18L32 19L20 19ZM49 10L52 7L55 10L55 52L54 53L53 52L53 10L52 9L50 11Z%22/><path fill=%22%23fce4e8%22 fill-rule=%22evenodd%22 d=%22M9 10L10 9L32 9L33 10L32 11L10 11ZM17 40L18 39L19 40L19 44L18 45L17 44ZM35 32L36 31L37 32L37 42L36 43L35 42ZM43 22L44 21L45 22L45 46L44 47L43 46Z%22/><path fill=%22%23e52b4c%22 fill-rule=%22evenodd%22 d=%22M9 8L10 7L32 7L33 8L32 9L10 9ZM37 20L40 17L41 18L39 20L40 21L42 21L43 22L42 23L40 23ZM37 32L38 31L39 32L39 42L38 43L37 42Z%22/><path fill=%22%23f5a9b6%22 fill-rule=%22evenodd%22 d=%22M9 38L10 37L16 37L17 38L16 39L10 39ZM25 32L26 31L27 32L27 44L26 45L25 44Z%22/><path fill=%22%23f08799%22 fill-rule=%22evenodd%22 d=%22M7 40L8 39L9 40L9 42L8 43L7 42ZM33 12L34 11L35 12L35 16L34 17L33 16ZM45 14L48 11L49 12L46 15Z%22/><path fill=%22%23f8cad2%22 fill-rule=%22evenodd%22 d=%22M23 22L24 21L26 21L27 22L26 23L24 23ZM31 24L32 23L35 26L34 27ZM39 20L42 17L43 18L40 21ZM45 52L46 51L52 51L53 52L52 53L46 53Z%22/></svg>',
+    '52pojie': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23e40006%22 fill-rule=%22evenodd%22 d=%22M1 6L4 3L20 3L21 4L20 7L14 8L12 7L6 7L5 8L5 10L8 12L5 16L6 22L8 25L14 25L15 26L15 28L16 29L22 27L24 25L26 27L28 27L29 26L29 24L27 22L29 20L29 16L27 14L29 12L29 8L28 7L26 7L24 4L26 2L28 1L30 3L34 2L38 3L42 2L44 3L58 3L59 4L59 10L61 16L61 18L59 20L59 24L59 26L61 28L59 30L60 34L59 36L60 38L61 42L59 44L59 48L61 50L59 52L60 54L59 58L56 60L54 59L50 60L48 60L44 61L42 60L38 61L36 60L34 60L32 61L26 61L24 60L14 61L12 59L10 59L6 60L4 59L2 56L1 54L2 52L3 48L3 42L2 40L2 36L3 34L3 24L2 20L3 16L2 12L3 10L3 8ZM5 38L12 31L14 34L16 35L18 35L20 33L28 33L31 38L30 40L29 42L26 44L29 46L28 50L30 50L31 52L30 53L27 54L26 56L24 57L22 56L20 55L18 55L16 57L14 56L15 54L14 53L13 54L14 56L12 57L10 56L6 57L5 56L5 44L5 42ZM33 16L34 15L36 15L37 14L37 12L38 11L40 11L41 10L40 9L36 9L35 8L35 6L36 5L56 5L57 6L53 10L53 14L54 15L58 15L59 16L58 19L54 20L56 24L54 28L52 29L44 29L38 29L37 28L35 24L36 22L38 20L36 19L34 19L33 18ZM35 36L36 35L42 33L52 33L54 33L54 34L53 36L54 38L57 40L57 44L53 48L53 50L52 52L56 54L56 56L54 57L52 57L50 56L46 55L42 58L40 57L36 57L35 56L35 54L37 52L38 48L36 48L35 46L35 40L36 39L38 39L39 38L36 37ZM41 24L42 23L44 23L50 23L51 24L50 25L48 25L42 25ZM46 42L48 41L52 41L53 42L52 43L48 43Z%22/><path fill=%22%23fefafa%22 fill-rule=%22evenodd%22 d=%22M-1 8L0 7L1 10L0 32L1 34L0 36L1 48L0 52L-1 48L0 36L-1 34L0 32ZM4 0L8 -1L22 -1L40 -1L42 0L54 -1L57 0L56 1L50 1L42 0L40 1L8 1ZM8 14L11 12L10 10L12 9L13 10L9 18L9 22L8 23L7 22L6 18ZM7 38L12 33L13 34L13 36L12 37L10 37L8 39ZM8 44L12 41L14 41L17 44L16 46L14 43L12 44L13 50L12 54L11 50L12 44L10 42L8 44L8 47ZM7 62L10 61L13 62L10 63ZM13 18L14 17L16 20L16 22L14 23L13 22ZM19 26L22 24L22 22L24 21L26 19L27 20L25 22L26 24L22 24L20 27ZM21 6L22 5L24 7L26 7L27 8L26 9L24 9L22 11L21 8ZM20 36L22 35L24 36L22 39ZM24 46L24 46L25 48L25 50L26 52L28 52L26 52L24 55L23 52L23 50L23 48ZM25 42L27 40L27 36L28 35L29 36L29 40L26 43ZM37 22L38 21L41 22L39 24L39 26L38 27L37 26ZM37 46L38 45L42 45L44 48L42 49L40 52L38 54L37 52L39 50L40 48ZM39 12L40 11L42 11L44 11L45 12L43 14L43 16L42 17L41 16L41 14ZM41 40L42 39L44 40L46 39L48 39L50 37L51 38L49 40L46 41L44 44ZM41 56L44 53L46 53L47 52L49 50L48 48L50 48L51 50L51 52L53 54L52 55L48 54L44 55L42 57ZM47 62L48 61L52 62L54 61L57 62L54 63L52 62L48 63ZM49 16L51 14L51 12L52 11L53 12L53 16L52 17ZM51 22L52 21L54 21L55 22L55 24L54 26L52 26L53 24ZM53 40L54 39L55 40L55 44L54 45L53 44ZM61 6L62 5L63 8L62 14L63 22L62 28L63 30L63 36L62 39L61 36L61 30L62 28L61 22L62 14Z%22/><path fill=%22%23fdd7db%22 fill-rule=%22evenodd%22 d=%22M-1 36L0 34L1 36L0 42ZM5 18L6 17L8 17L7 14L9 12L8 10L10 9L12 10L13 12L10 14L14 15L16 18L17 18L17 14L18 10L19 14L20 15L21 14L21 10L19 8L22 6L24 7L26 7L28 10L26 11L24 9L23 10L23 12L26 16L26 17L24 16L20 17L18 18L17 20L17 24L17 26L16 27L15 26L15 24L14 22L13 20L13 18L12 17L10 17L8 18L8 22L8 20ZM7 42L10 41L13 42L12 50L13 54L12 55L10 51L8 54L7 52ZM9 44L10 43L12 46L11 48L10 50L9 48ZM16 44L16 42L17 46L18 47L20 45L22 46L24 45L25 46L25 50L26 51L28 51L29 52L28 53L26 53L24 54L24 56L24 54L21 52L23 50L24 48L22 47L20 49L18 49L17 50L17 52L16 54L14 50L16 48L15 46ZM19 26L21 24L21 22L22 21L24 21L26 19L27 24L26 25L22 25L20 27ZM19 36L20 35L22 36L24 35L28 35L29 36L28 40L28 38L26 37L24 37L22 38L22 40L20 43L19 42L22 40L22 38ZM18 62L20 61L26 62L36 61L38 62L36 63L26 62L20 63ZM35 42L36 41L38 42L38 44L40 45L41 44L42 42L40 40L39 38L37 36L38 35L40 36L46 36L48 34L52 33L53 34L52 35L50 36L50 37L50 36L48 34L46 36L42 36L41 38L42 39L46 40L50 38L52 40L50 41L46 40L44 42L45 44L44 46L46 46L48 45L50 46L53 50L51 52L54 54L48 55L44 54L46 53L49 50L48 49L42 49L40 50L43 52L40 53L38 55L37 54L37 52L40 50L39 48L36 46L38 44ZM39 12L42 10L41 8L42 6L50 5L54 5L55 6L54 7L46 7L45 8L45 10L47 12L44 13L43 14L42 16L41 14ZM38 26L40 25L42 27L50 27L52 25L54 24L55 26L50 29L48 29L40 28ZM44 62L52 61L56 61L57 62L56 63L52 63ZM48 20L50 20L52 21L54 21L55 22L54 24L52 23L50 20ZM49 12L52 12L53 14L54 15L56 15L57 16L56 17L52 16L50 17L49 16L51 14ZM51 44L53 42L53 40L54 40L54 44L52 44ZM62 8L62 7L62 8L63 12L63 18L62 21L61 18ZM61 24L62 22L63 26L62 36L63 38L62 41L61 38L62 36L61 28Z%22/><path fill=%22%23f46874%22 fill-rule=%22evenodd%22 d=%22M1 24L2 23L3 24L3 30L2 31L1 30ZM5 8L6 7L12 7L13 8L12 9L6 9ZM5 38L10 33L11 34L9 36L10 38L12 37L15 38L14 39L12 39L8 37L6 40ZM5 44L6 43L7 44L8 56L6 57L5 56ZM6 2L8 1L10 2L18 1L20 2L18 3L10 2L8 3ZM7 24L10 21L12 21L15 24L14 25L12 23L10 23L8 25ZM17 20L20 17L23 20L22 21L20 20L19 24L18 26L17 24ZM17 36L20 33L24 34L18 36L19 38L18 39ZM23 10L24 9L28 12L26 14L24 12ZM23 44L24 43L26 45L28 45L29 46L28 48ZM33 16L34 15L36 16L38 15L39 16L38 17L36 16L34 19L33 18ZM40 18L42 17L48 17L52 17L56 17L58 15L59 16L56 19L52 20L46 19L44 20L44 22L46 21L50 22L50 22L50 22L48 23L46 23L42 21ZM41 26L42 25L50 25L51 26L50 27L42 27ZM46 8L49 8L50 10L48 10L46 11L45 10ZM57 2L58 1L61 4L61 6L60 7L59 6L59 4Z%22/><path fill=%22%23ec2637%22 fill-rule=%22evenodd%22 d=%22M2 6L2 6L4 7L4 10L4 14L2 16L1 14L1 12L4 10L2 8ZM1 18L2 17L7 20L7 22L6 24L7 26L8 27L12 28L14 26L14 30L12 28L11 30L14 30L18 32L19 34L18 36L21 38L20 39L18 38L16 32L16 34L14 35L12 33L10 32L10 31L6 35L5 34L6 24L4 22L4 18L3 22L2 23L1 22ZM1 32L2 30L4 32L3 40L2 41L1 38ZM1 50L2 49L4 50L4 52L3 54L3 56L2 57L1 56L2 54ZM3 60L4 59L6 58L8 58L9 60L8 61L4 61ZM5 40L6 39L10 40L8 40L6 43L4 42ZM9 18L10 17L12 17L13 20L12 21L10 21L9 20ZM11 60L12 59L14 58L18 60L12 61ZM13 8L14 6L16 6L17 8L16 10L17 12L16 14L14 14L13 12L16 10ZM17 28L18 27L21 28L22 29L24 29L28 29L30 30L33 34L32 38L32 41L34 38L34 41L33 42L33 44L34 46L36 47L38 47L39 48L38 49L35 50L36 51L36 52L36 52L34 52L33 50L33 46L32 45L32 52L34 56L30 57L29 56L28 55L28 58L36 58L38 60L36 61L34 61L32 60L26 60L24 61L18 60L20 58L25 58L25 54L26 53L28 54L29 52L25 50L30 48L30 46L31 42L30 42L29 40L29 36L27 34L28 32L30 32L28 31L22 31L20 30L18 30ZM19 2L22 1L24 3L26 1L28 2L29 2L28 4L26 3L26 4L26 5L28 5L30 6L32 5L33 6L33 8L34 10L36 11L36 12L38 13L41 14L38 15L36 13L34 12L32 15L31 14L32 10L30 6L26 6L22 3L20 4ZM19 20L20 18L22 18L24 19L25 20L24 21L22 18L21 20L21 24L20 25L19 24ZM24 12L24 11L26 13L28 11L30 12L28 14L26 15ZM30 22L32 19L33 20L33 26L34 28L34 22L38 19L41 20L38 21L37 22L37 26L36 28L34 28L36 30L36 31L33 28L30 27L30 24ZM34 34L36 32L38 32L40 32L41 34L36 36L39 38L39 40L38 41ZM38 2L42 1L44 2L42 4L40 3ZM37 56L40 54L41 56L44 58L44 60L46 58L54 59L56 58L57 60L56 61L54 60L48 61L44 60L40 61L38 60L38 58ZM41 30L46 30L54 31L55 30L54 30L53 28L56 26L55 24L55 22L53 20L54 19L57 22L58 25L58 24L60 23L61 24L60 25L58 26L60 28L60 29L58 28L57 30L56 34L57 38L54 39L53 38L54 36L55 36L54 36L52 33L49 32L48 31L42 31ZM46 8L50 7L54 8L56 7L57 8L56 11L55 14L54 14L54 12L50 9ZM51 52L56 48L54 47L53 46L56 43L57 44L57 46L56 48L60 51L61 56L60 57L58 56L59 52L58 51L56 51L54 51L53 52L52 53ZM55 54L56 52L58 54L58 56L56 58ZM57 18L58 16L60 17L60 20L58 19ZM58 8L60 7L61 8L60 16L58 14ZM58 38L60 37L61 38L60 42L61 44L60 45L58 44L60 42Z%22/><path fill=%22%23f14757%22 fill-rule=%22evenodd%22 d=%22M1 4L4 1L8 2L6 3L4 3L2 5ZM1 22L2 20L3 22L3 28L3 34L2 35L1 34ZM5 38L12 31L14 34L12 33L7 38L9 40L6 42L7 48L6 56L5 50ZM11 8L16 7L17 8L16 12L17 14L16 16L14 12L12 15L11 14L15 10L14 8ZM18 22L20 17L22 20L21 22L21 24L20 25L18 24ZM17 36L18 35L20 34L21 34L20 34L19 36L20 38L18 39L17 38ZM18 2L20 1L24 1L26 2L24 4L24 6L24 4L22 2L20 3ZM23 10L24 9L26 12L28 11L29 12L26 15L23 12ZM36 22L38 20L39 20L36 22L37 24L36 26L39 28L38 29L36 26L35 24ZM39 24L40 23L42 25L50 26L52 23L53 24L50 26L44 27L42 27ZM42 2L44 1L46 2L48 1L50 1L51 2L50 3L48 3L46 2L44 3ZM45 8L46 7L54 7L56 5L57 6L52 11L50 9L48 9L46 10ZM50 18L52 17L56 18L58 15L59 16L59 18L61 20L61 26L60 27L59 26L60 22L58 18L56 18L54 19ZM51 46L54 45L55 44L56 40L53 38L54 38L56 40L57 44L54 47ZM54 2L58 2L60 4L61 10L60 11L59 10L60 4L58 2ZM59 30L60 29L61 30L60 34L61 36L60 37L59 36L60 34Z%22/><path fill=%22%23fcc4c9%22 fill-rule=%22evenodd%22 d=%22M5 10L6 9L10 9L12 11L14 10L14 10L12 13L9 14L10 15L14 15L16 17L18 16L17 14L18 12L20 15L21 14L21 10L18 8L20 7L22 9L26 8L28 9L29 10L28 11L26 11L24 8L23 10L23 12L25 14L26 17L29 18L26 19L26 18L24 17L22 16L20 17L17 20L17 26L16 27L15 22L14 20L15 18L12 17L10 17L8 15L6 16L7 18L6 19L5 18L9 12L8 11L6 11ZM7 42L8 41L10 41L13 44L12 45L10 43L8 44L9 46L9 48L12 51L15 48L14 46L16 45L18 47L20 45L24 45L26 48L24 50L26 51L28 51L29 52L28 53L26 53L24 51L23 52L22 53L18 52L16 53L14 50L12 52L13 54L12 55L11 54L11 52L10 51L9 52L8 55ZM12 62L14 61L22 62L14 63ZM17 50L18 49L22 48L24 50L20 52L18 52ZM19 26L22 24L21 22L22 21L24 22L26 20L27 22L27 24L29 26L28 27L26 25L24 24L22 25L20 26ZM24 62L26 61L32 61L34 62L36 61L41 62L36 63L34 62L32 63L26 63ZM35 42L36 41L37 42L39 44L39 46L41 48L40 49L38 46L36 47L35 46L37 44ZM36 54L38 52L42 50L44 52L42 53L40 53L38 55ZM38 6L46 5L54 6L46 7L45 8L45 10L46 11L48 12L50 11L52 12L50 13L48 12L46 13L42 11L41 10L41 8L40 7L38 8ZM39 26L40 25L42 28L50 27L52 25L54 25L55 26L50 29L42 28L40 29L39 28ZM39 38L42 35L44 36L41 38L42 40L44 39L45 40L44 42L46 45L50 45L52 43L53 44L50 46L53 50L50 52L51 54L48 55L46 54L47 52L50 50L48 49L44 49L42 48L41 42L39 40ZM45 20L50 19L51 20L52 21L54 22L52 22L50 21ZM44 36L48 33L52 33L53 34L52 36L50 37L48 35L46 37ZM61 12L62 10L63 12L63 18L62 19L61 18Z%22/><path fill=%22%23fbabb3%22 fill-rule=%22evenodd%22 d=%22M5 10L6 9L8 8L10 10L11 12L10 12ZM8 48L9 46L10 45L11 46L11 52L12 54L10 52L8 57L7 54L9 52L9 50ZM12 16L14 15L16 17L18 17L19 18L18 19L16 20L14 17ZM13 46L14 45L16 46L18 48L20 46L20 44L23 46L23 48L22 49L18 48L16 50L16 51L18 51L23 52L18 54L13 50L15 48ZM16 22L16 21L17 24L19 26L16 29L15 28L17 26L15 24ZM19 40L22 39L25 42L24 43L22 41L20 41ZM21 12L22 11L25 14L25 16L26 17L28 17L29 18L28 19L26 19L23 16ZM25 62L26 61L32 61L33 62L32 63L26 63ZM36 16L38 16L40 15L41 16L41 18L38 19L36 19L35 18ZM35 42L36 41L38 43L40 42L39 38L42 35L43 36L41 38L41 40L42 41L46 38L45 34L48 33L51 34L53 36L52 37L50 37L48 35L43 42L46 45L50 43L52 43L53 44L51 46L53 48L53 50L52 51L51 50L50 48L44 48L43 50L46 52L42 54L41 52L41 50L44 48L43 46L40 42L37 46L36 47L35 46L37 44ZM37 6L38 5L42 5L50 6L46 7L44 8L45 10L46 11L48 10L50 10L51 12L50 13L46 12L41 10L43 8L42 8L38 9L37 8ZM41 22L43 20L44 19L48 19L53 20L50 22L48 21L46 21L42 23ZM43 16L44 15L48 15L49 16L48 17L44 18Z%22/></svg>',
+    'acfun': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%2357a5dd%22 fill-rule=%22evenodd%22 d=%22M-1 4L0 3L2 3L3 2L3 0L4 -1L58 -1L59 0L59 6L60 7L62 7L63 8L63 10L62 11L60 11L59 10L59 8L58 7L52 7L51 6L51 4L50 3L48 3L47 4L47 10L46 11L36 11L35 10L35 4L34 3L24 3L23 4L23 6L22 7L20 7L19 8L19 10L18 11L16 11L15 10L15 4L14 3L12 3L11 4L11 10L10 11L8 11L7 10L7 8L6 7L4 7L3 8L3 10L2 11L0 11L-1 10ZM-1 20L0 19L2 19L3 20L3 26L2 27L0 27L-1 26ZM-1 32L0 31L2 31L3 32L3 34L2 35L0 35L-1 34ZM-1 44L0 43L2 43L3 44L3 50L4 51L6 51L7 50L7 44L8 43L10 43L11 44L11 54L12 55L58 55L59 54L59 44L60 43L62 43L63 44L63 54L62 55L60 55L59 56L59 58L58 59L56 59L55 60L55 62L54 63L8 63L7 62L7 60L6 59L0 59L-1 58ZM11 20L12 19L14 19L15 20L15 22L14 23L12 23L11 22ZM15 44L16 43L18 43L19 44L19 46L18 47L16 47L15 46ZM23 12L24 11L26 11L27 12L27 14L26 15L24 15L23 14ZM51 40L52 39L54 39L55 40L55 42L54 43L52 43L51 42ZM59 16L60 15L62 15L63 16L63 18L62 19L60 19L59 18ZM59 32L60 31L62 31L63 32L63 34L62 35L60 35L59 34Z%22/><path fill=%22%23fbfefe%22 fill-rule=%22evenodd%22 d=%22M3 24L4 23L10 23L11 24L11 30L10 31L4 31L3 30ZM15 16L16 15L18 15L19 16L19 22L18 23L16 23L15 22ZM35 40L36 39L38 39L39 40L39 42L38 43L36 43L35 42ZM43 24L44 23L46 23L47 24L47 26L48 27L50 27L51 28L51 30L50 31L48 31L47 30L47 28L46 27L44 27L43 26ZM51 16L52 15L58 15L59 16L59 22L58 23L52 23L51 22ZM55 32L56 31L58 31L59 32L59 34L58 35L56 35L55 34Z%22/><path fill=%22%237cb9e5%22 fill-rule=%22evenodd%22 d=%22M-1 16L0 15L2 15L3 14L3 12L4 11L6 11L7 12L7 22L6 23L4 23L3 22L3 20L2 19L0 19L-1 18ZM-1 28L0 27L2 27L3 28L3 30L2 31L0 31L-1 30ZM-1 36L0 35L2 35L3 36L3 38L2 39L0 39L-1 38ZM11 8L12 7L14 7L15 8L15 10L14 11L12 11L11 10ZM11 24L12 23L14 23L15 24L15 30L14 31L12 31L11 30ZM23 8L24 7L26 7L27 6L27 4L28 3L34 3L35 4L35 6L34 7L28 7L27 8L27 10L26 11L24 11L23 10ZM47 8L48 7L50 7L51 8L51 10L50 11L48 11L47 10ZM47 20L48 19L50 19L51 20L51 22L52 23L54 23L55 24L55 26L54 27L52 27L51 26L51 24L50 23L48 23L47 22ZM51 44L52 43L54 43L55 42L55 40L56 39L58 39L59 38L59 36L60 35L62 35L63 36L63 38L62 39L60 39L59 40L59 42L58 43L56 43L55 44L55 54L54 55L52 55L51 54ZM55 12L56 11L58 11L59 12L59 14L58 15L56 15L55 14ZM59 20L60 19L62 19L63 20L63 30L62 31L60 31L59 30Z%22/><path fill=%22%233a96d6%22 fill-rule=%22evenodd%22 d=%22M-1 12L0 11L2 11L3 10L3 8L4 7L6 7L7 8L7 10L6 11L4 11L3 12L3 14L2 15L0 15L-1 14ZM3 48L4 47L6 47L7 48L7 50L6 51L4 51L3 50ZM3 60L4 59L6 59L7 60L7 62L6 63L4 63L3 62ZM11 4L12 3L14 3L15 4L15 6L14 7L12 7L11 6ZM15 40L16 39L18 39L19 38L19 36L20 35L22 35L23 36L23 46L22 47L20 47L19 46L19 44L18 43L16 43L15 42ZM39 36L40 35L46 35L47 36L47 46L46 47L40 47L39 46ZM47 4L48 3L50 3L51 4L51 6L52 7L58 7L59 6L59 4L60 3L62 3L63 4L63 6L62 7L60 7L59 8L59 10L60 11L62 11L63 12L63 14L62 15L60 15L59 14L59 12L58 11L52 11L51 10L51 8L50 7L48 7L47 6ZM55 44L56 43L58 43L59 44L59 54L60 55L62 55L63 56L63 58L62 59L60 59L59 60L59 62L58 63L56 63L55 62L55 60L56 59L58 59L59 58L59 56L58 55L56 55L55 54Z%22/><path fill=%22%23fb7a00%22 fill-rule=%22evenodd%22 d=%22M11 36L12 35L18 35L19 36L19 38L18 39L12 39L11 38ZM19 28L20 27L22 27L23 28L23 30L22 31L20 31L19 30ZM23 20L24 19L26 19L27 20L27 22L26 23L24 23L23 22ZM35 20L36 19L38 19L39 20L39 22L38 23L36 23L35 22ZM39 28L40 27L42 27L43 28L43 30L42 31L40 31L39 30ZM47 36L48 35L50 35L51 36L51 38L50 39L48 39L47 38Z%22/><path fill=%22%23cae2f4%22 fill-rule=%22evenodd%22 d=%22M-1 0L0 -1L2 -1L3 0L3 2L2 3L0 3L-1 2ZM-1 40L0 39L2 39L3 38L3 32L4 31L6 31L7 32L7 38L6 39L4 39L3 40L3 42L2 43L0 43L-1 42ZM-1 60L0 59L2 59L3 60L3 62L2 63L0 63L-1 62ZM7 12L8 11L18 11L19 12L19 14L18 15L8 15L7 14ZM15 24L16 23L18 23L19 24L19 26L18 27L16 27L15 26ZM43 12L44 11L54 11L55 12L55 14L54 15L48 15L47 16L47 18L46 19L44 19L43 18ZM55 28L56 27L58 27L59 28L59 30L58 31L56 31L55 30ZM55 36L56 35L58 35L59 36L59 38L60 39L62 39L63 40L63 42L62 43L60 43L59 42L59 40L58 39L56 39L55 38ZM59 0L60 -1L62 -1L63 0L63 2L62 3L60 3L59 2Z%22/><path fill=%22%2328a7fc%22 fill-rule=%22evenodd%22 d=%22M3 44L4 43L6 43L7 44L7 46L6 47L4 47L3 46ZM19 8L20 7L22 7L23 6L23 4L24 3L26 3L27 4L27 6L26 7L24 7L23 8L23 14L22 15L20 15L19 14ZM31 8L32 7L34 7L35 8L35 10L36 11L42 11L43 12L43 14L42 15L32 15L31 14Z%22/><path fill=%22%23ea962a%22 fill-rule=%22evenodd%22 d=%22M7 40L8 39L10 39L11 40L11 42L10 43L8 43L7 42ZM11 32L12 31L14 31L15 32L15 34L14 35L12 35L11 34ZM15 48L16 47L18 47L19 48L19 50L18 51L16 51L15 50ZM19 24L20 23L22 23L23 24L23 26L24 27L26 27L27 26L27 24L28 23L34 23L35 24L35 26L36 27L38 27L39 26L39 24L40 23L42 23L43 24L43 26L44 27L46 27L47 28L47 30L48 31L50 31L51 32L51 34L52 35L54 35L55 36L55 38L54 39L52 39L51 38L51 36L50 35L48 35L47 34L47 32L46 31L44 31L43 30L43 28L42 27L40 27L39 28L39 34L38 35L36 35L35 34L35 32L34 31L32 31L31 32L31 34L30 35L20 35L19 34L19 32L20 31L22 31L23 30L23 28L22 27L20 27L19 26ZM23 16L24 15L26 15L27 14L27 8L28 7L30 7L31 8L31 14L32 15L38 15L39 16L39 18L38 19L24 19L23 18ZM43 48L44 47L46 47L47 48L47 50L46 51L44 51L43 50Z%22/><path fill=%22%23add3ee%22 fill-rule=%22evenodd%22 d=%22M3 40L4 39L6 39L7 40L7 42L6 43L4 43L3 42ZM7 16L8 15L14 15L15 16L15 18L14 19L12 19L11 20L11 22L10 23L8 23L7 22ZM43 20L44 19L46 19L47 18L47 16L48 15L50 15L51 16L51 18L50 19L48 19L47 20L47 22L48 23L50 23L51 24L51 26L52 27L54 27L55 26L55 24L56 23L58 23L59 24L59 26L58 27L56 27L55 28L55 30L54 31L52 31L51 30L51 28L50 27L48 27L47 26L47 24L46 23L44 23L43 22ZM59 60L60 59L62 59L63 60L63 62L62 63L60 63L59 62Z%22/><path fill=%22%23fc9509%22 fill-rule=%22evenodd%22 d=%22M11 40L12 39L14 39L15 40L15 42L14 43L12 43L11 42ZM15 32L16 31L18 31L19 32L19 34L18 35L16 35L15 34ZM23 24L24 23L26 23L27 22L27 20L28 19L34 19L35 20L35 22L36 23L38 23L39 24L39 26L38 27L36 27L35 26L35 24L34 23L28 23L27 24L27 26L26 27L24 27L23 26ZM27 36L28 35L30 35L31 34L31 32L32 31L34 31L35 32L35 38L34 39L28 39L27 38ZM43 32L44 31L46 31L47 32L47 34L46 35L44 35L43 34Z%22/><path fill=%22%23fbeada%22 fill-rule=%22evenodd%22 d=%22M7 32L8 31L10 31L11 32L11 34L10 35L8 35L7 34ZM11 44L12 43L14 43L15 44L15 46L14 47L12 47L11 46ZM23 40L24 39L26 39L27 40L27 42L28 43L38 43L39 44L39 50L38 51L36 51L35 50L35 48L34 47L28 47L27 48L27 50L26 51L24 51L23 50L23 48L24 47L26 47L27 46L27 44L26 43L24 43L23 42ZM39 32L40 31L42 31L43 32L43 34L42 35L40 35L39 34ZM47 44L48 43L50 43L51 44L51 46L50 47L48 47L47 46ZM51 32L52 31L54 31L55 32L55 34L54 35L52 35L51 34Z%22/><path fill=%22%23e8d4b9%22 fill-rule=%22evenodd%22 d=%22M7 36L8 35L10 35L11 36L11 38L10 39L8 39L7 38ZM11 48L12 47L14 47L15 48L15 50L16 51L18 51L19 50L19 48L20 47L22 47L23 46L23 44L24 43L26 43L27 42L27 40L26 39L24 39L23 38L23 36L24 35L26 35L27 36L27 38L28 39L34 39L35 38L35 36L36 35L38 35L39 36L39 38L38 39L36 39L35 40L35 42L34 43L28 43L27 44L27 46L28 47L34 47L35 48L35 50L36 51L38 51L39 50L39 48L40 47L42 47L43 48L43 50L44 51L46 51L47 50L47 48L48 47L50 47L51 48L51 54L50 55L12 55L11 54ZM15 28L16 27L18 27L19 28L19 30L18 31L16 31L15 30ZM19 16L20 15L22 15L23 16L23 22L22 23L20 23L19 22ZM23 48L24 47L26 47L27 48L27 50L26 51L24 51L23 50ZM39 16L40 15L42 15L43 16L43 22L42 23L40 23L39 22ZM47 40L48 39L50 39L51 40L51 42L50 43L48 43L47 42Z%22/></svg>',
+    'baidu': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23fefefe%22 fill-rule=%22evenodd%22 d=%22M-1 4L2 1L4 -1L6 -1L56 -1L58 -1L60 1L63 4L63 8L63 56L63 58L61 60L58 63L54 63L6 63L4 63L2 61L-1 58L-1 56ZM5 20L8 17L12 17L14 17L17 20L18 26L17 30L14 33L10 33L8 32L6 30L5 28ZM7 46L9 42L25 26L28 24L32 23L34 25L36 25L39 28L41 32L51 40L53 44L53 52L48 57L44 59L40 59L36 57L26 57L18 59L16 59L14 57L12 57L9 54L9 52L7 50ZM15 10L18 5L22 3L24 3L29 8L29 16L24 21L22 21L17 18L17 16L15 14ZM15 44L20 39L24 39L25 38L25 34L26 33L27 34L28 36L28 50L26 52L22 52L18 51L15 48ZM18 46L19 44L22 42L24 42L25 44L25 48L24 49L20 49ZM31 10L34 5L36 3L40 3L45 8L45 16L40 21L36 21L33 18L33 16L31 14ZM33 40L34 39L35 40L35 48L36 49L38 49L40 49L41 48L41 40L42 39L43 40L43 50L42 52L36 52L33 50ZM43 22L46 17L52 17L54 19L56 22L57 26L55 30L52 33L48 33L46 32L43 28Z%22/><path fill=%22%232a33e1%22 fill-rule=%22evenodd%22 d=%22M5 24L7 22L7 20L10 17L12 17L17 22L17 28L14 31L8 31L7 30L7 28L5 26ZM9 44L23 30L24 28L28 25L34 25L39 30L42 35L46 37L51 42L51 44L52 46L52 48L50 53L46 57L38 57L36 56L34 55L32 55L28 55L24 57L16 57L14 57L9 52ZM15 42L18 39L22 39L24 38L24 34L26 33L28 33L29 34L29 52L28 53L18 53L15 50L14 46ZM18 8L20 5L24 5L26 7L28 12L26 18L20 19L17 16L17 10ZM20 44L22 43L24 44L24 46L24 48L22 49L21 48L19 46ZM31 40L32 39L34 39L35 40L35 46L36 48L38 49L39 48L39 40L42 38L45 40L45 52L44 53L34 53L31 50ZM33 8L36 5L40 5L43 8L44 12L43 14L43 16L40 19L36 19L33 16ZM45 20L50 17L55 22L55 28L52 31L46 31L45 30Z%22/><path fill=%22%23c8caf7%22 fill-rule=%22evenodd%22 d=%22M15 10L16 8L17 10L16 12L17 14L16 16L15 14L15 12ZM14 58L16 57L22 57L24 58L22 59L16 59ZM19 40L24 41L25 42L22 43L20 42ZM19 52L20 51L26 51L27 50L27 36L26 34L28 33L29 34L29 38L29 52L28 53L20 53ZM27 24L28 23L32 23L34 24L32 25L28 25ZM32 8L36 3L37 4L32 8L33 10L33 14L32 16L31 14L31 10ZM31 40L32 39L34 40L33 48L33 50L34 51L38 50L42 51L43 52L42 53L34 53L32 50L31 48ZM37 58L40 57L47 58L44 59L40 59ZM46 36L46 35L48 37L53 42L52 43Z%22/><path fill=%22%23e8e9fc%22 fill-rule=%22evenodd%22 d=%22M0 6L0 4L2 2L6 0L56 0L60 2L62 4L63 8L62 56L60 60L58 62L54 63L6 62L2 60L0 58L0 56ZM6 20L8 17L14 17L17 20L17 30L14 33L10 33L5 28L5 22ZM7 46L9 44L9 42L26 25L28 25L30 23L32 23L34 25L36 25L39 28L39 30L41 32L46 37L51 40L51 42L53 44L53 52L48 57L46 57L44 59L42 59L38 57L24 57L18 59L16 58L12 57L9 54L9 52L7 50L7 48ZM15 12L18 6L22 3L24 3L29 8L29 16L24 21L22 21L20 19L17 18ZM15 44L20 39L24 39L25 38L25 34L26 33L28 34L29 36L29 50L27 52L26 53L22 53L20 52L15 48ZM19 44L20 43L24 43L25 44L25 48L24 49L20 49L19 48ZM31 12L33 8L33 6L38 3L42 5L45 8L45 16L42 19L38 21L36 20L34 19L33 18L33 16ZM32 40L34 39L35 40L35 48L36 49L40 49L41 48L41 40L42 39L43 40L43 52L42 53L36 53L32 48ZM43 22L48 17L52 17L55 20L56 22L57 24L57 26L55 28L55 30L52 33L48 33L43 28Z%22/><path fill=%22%23434be4%22 fill-rule=%22evenodd%22 d=%22M6 22L8 21L10 17L12 17L14 21L16 21L17 22L17 28L16 29L12 30L12 31L11 30L10 30L8 31L7 30L8 28L6 28L5 26ZM9 44L13 42L12 41L12 40L14 41L16 38L17 38L18 36L24 30L23 28L24 27L26 26L32 26L34 25L36 28L51 42L50 45L52 45L53 46L53 48L52 51L50 51L50 52L51 54L50 55L48 53L47 54L47 56L46 57L42 56L36 57L34 56L35 54L36 54L42 53L46 52L46 42L47 40L44 39L38 39L38 48L36 49L35 46L35 40L34 39L32 39L30 40L30 50L30 34L28 33L26 33L25 34L25 38L24 39L18 38L14 42L15 46L14 50L17 52L18 54L28 54L26 57L16 56L14 57L12 54L9 52L10 48ZM17 8L20 5L24 6L26 5L27 6L25 8L26 10L28 10L29 12L28 14L26 14L25 16L27 18L26 19L24 18L20 19L17 16L18 12ZM19 44L20 43L22 44L24 43L25 44L25 48L24 49L20 48L21 46L20 46ZM30 52L30 50L33 52L32 54L30 53ZM33 8L36 6L40 6L42 8L42 10L44 10L45 12L44 14L42 14L41 16L42 18L36 18L33 16L34 12ZM45 20L48 17L52 18L51 20L52 21L54 20L54 29L50 30L50 31L49 30L48 30L46 31L45 30L46 28L46 26L46 22Z%22/><path fill=%22%23a5a9f2%22 fill-rule=%22evenodd%22 d=%22M7 46L8 45L9 46L9 50L8 51L7 50ZM15 36L20 31L21 32L16 37ZM33 18L34 17L36 20L40 19L41 20L40 21L36 20Z%22/><path fill=%22%23141ede%22 fill-rule=%22evenodd%22 d=%22M7 20L8 19L12 18L15 20L17 24L17 26L16 28L14 31L10 31L8 30L6 26ZM9 44L28 25L32 25L36 27L41 34L50 42L51 48L51 52L46 56L44 57L38 56L36 55L34 55L26 55L22 57L16 57L12 55L10 52L9 50ZM13 46L15 42L17 40L18 39L23 38L24 33L28 32L29 34L29 52L28 53L18 53L15 50ZM17 10L20 6L24 5L27 8L27 16L26 17L24 19L20 19L17 14ZM19 46L22 43L23 44L23 48L22 49ZM32 38L34 37L36 39L36 46L38 49L39 48L39 40L40 38L42 37L44 39L45 40L45 52L44 53L36 53L31 52L31 40ZM33 10L36 5L40 5L43 8L43 16L40 19L36 19L34 16ZM46 20L50 18L55 22L55 28L52 31L48 31L46 30L45 28L45 22Z%22/><path fill=%22%23747aeb%22 fill-rule=%22evenodd%22 d=%22M25 56L28 55L34 55L36 56L34 57L28 57ZM39 40L40 39L41 40L41 48L40 49L39 48ZM43 24L44 22L45 24L44 28ZM43 40L44 39L45 40L45 52L44 53L43 52Z%22/></svg>',
+    'bilibili': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%2300a1d6%22 fill-rule=%22evenodd%22 d=%22M-1 20L1 16L4 13L8 11L12 11L13 10L10 6L10 4L12 2L14 1L16 2L25 10L26 11L28 11L36 11L46 2L48 1L50 2L52 4L52 6L49 10L50 11L54 11L58 13L61 16L63 20L63 48L63 50L61 54L58 57L54 59L52 59L10 59L8 59L4 57L1 54L-1 48ZM7 22L10 19L52 19L55 22L55 48L52 51L10 51L7 48ZM15 30L18 27L20 27L23 30L23 36L20 39L18 39L15 36ZM39 30L42 27L44 27L47 30L47 36L44 39L42 39L39 36Z%22/></svg>',
+    'coolapk': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%2317b658%22 fill-rule=%22evenodd%22 d=%22M3 22L8 14L12 10L18 6L24 3L40 3L46 6L50 9L56 16L59 22L60 28L60 34L59 40L54 49L49 54L44 57L34 60L28 60L22 59L14 55L9 50L6 46L4 42L3 38ZM9 30L12 24L14 22L18 20L24 19L34 24L40 19L43 22L43 24L46 26L45 28L48 30L49 34L52 36L51 38L53 40L50 44L48 41L46 41L40 36L38 36L36 34L28 42L26 42L24 44L20 44L14 40L12 38L9 32ZM15 28L18 25L26 25L30 30L32 30L26 37L18 37L15 34Z%22/><path fill=%22%23fdfefd%22 fill-rule=%22evenodd%22 d=%22M11 28L13 26L14 24L18 21L26 21L28 23L30 23L32 25L33 26L32 27L30 27L28 25L26 25L24 23L20 23L15 26L15 28L13 30L13 32L15 36L20 39L24 39L26 37L28 37L31 34L37 24L40 21L43 24L43 26L45 28L45 30L47 32L47 34L51 40L50 41L48 41L44 37L39 34L38 32L40 31L42 33L44 32L43 30L40 26L37 28L36 30L32 36L26 41L18 41L14 39L13 36L11 34Z%22/><path fill=%22%2329c368%22 fill-rule=%22evenodd%22 d=%22M3 22L6 16L9 12L14 7L18 5L22 3L28 3L40 3L48 7L54 14L58 21L60 28L60 34L56 44L54 48L50 52L44 56L33 60L29 60L17 56L12 53L8 48L3 40L3 36L2 28ZM9 30L11 28L11 26L16 21L18 20L20 19L24 19L26 21L28 20L30 23L34 23L36 23L40 18L42 21L44 22L43 24L46 25L47 26L45 28L46 29L48 28L48 28L49 30L48 32L48 32L49 32L50 31L51 32L51 34L53 36L52 38L52 40L54 38L55 40L54 42L52 40L51 42L52 44L50 45L48 45L47 44L49 42L48 41L46 43L42 40L42 38L40 35L38 37L34 36L30 40L31 42L30 43L28 43L26 41L25 42L27 44L26 45L22 45L18 44L18 42L16 42L11 36L11 34L9 32ZM16 28L18 26L20 27L24 27L26 25L27 26L26 28L28 29L30 31L32 29L33 30L30 32L28 32L26 34L26 34L26 36L26 36L24 35L18 35L16 34L17 30Z%22/><path fill=%22%23089a43%22 fill-rule=%22evenodd%22 d=%22M4 38L4 37L6 34L7 28L11 22L14 19L16 18L18 17L26 16L24 14L32 6L37 4L39 4L40 6L44 7L50 10L54 14L55 16L56 17L57 20L58 22L59 40L56 46L49 54L40 59L24 59L22 59L20 57L17 56L12 52L8 48L8 46L6 44L7 42L6 40L4 40ZM8 28L10 26L10 24L14 20L16 20L18 18L26 19L27 20L32 23L34 25L37 22L37 20L38 19L40 19L43 22L44 24L49 32L49 34L51 36L51 38L53 40L50 43L48 42L42 37L38 35L36 33L32 38L26 42L24 43L18 43L16 41L14 41L11 38L11 36L9 34ZM16 28L18 26L24 25L28 27L32 30L31 32L26 36L18 37L15 34Z%22/><path fill=%22%2347c47a%22 fill-rule=%22evenodd%22 d=%22M2 28L5 18L8 14L12 9L17 6L22 4L30 2L34 2L40 5L44 6L44 7L40 8L40 10L32 18L34 20L32 20L31 22L33 24L32 25L29 22L30 21L32 20L30 18L28 18L27 20L26 21L24 20L23 20L24 19L27 18L26 17L24 17L18 18L17 18L20 20L18 21L16 20L15 20L15 22L12 25L10 25L9 26L11 28L11 34L10 36L9 36L9 38L10 39L11 38L12 37L15 40L14 41L12 42L8 40L6 44L8 46L6 44L5 40L2 34Z%22/><path fill=%22%23e6f3eb%22 fill-rule=%22evenodd%22 d=%22M11 28L13 26L13 24L14 23L18 21L26 21L28 23L30 23L34 28L37 24L38 22L40 21L43 24L43 26L45 28L45 30L48 34L49 36L51 38L51 40L48 41L44 37L42 36L36 31L35 32L32 37L30 39L28 39L26 41L16 40L13 38L12 36ZM13 30L15 28L15 26L16 25L18 25L20 23L24 23L26 25L28 25L30 27L32 27L34 28L33 30L31 32L31 34L28 37L26 37L24 39L20 39L18 37L16 37L15 36L15 34L13 32ZM37 28L38 27L40 27L43 30L43 32L42 33L40 31L38 32Z%22/><path fill=%22%23c8e6d5%22 fill-rule=%22evenodd%22 d=%22M11 26L16 21L19 24L18 25L14 28L14 31L13 28ZM11 36L14 32L15 34L13 36L14 37L16 39L18 37L19 38L16 41ZM23 24L24 23L26 23L27 22L28 22L30 24L28 26L26 24L24 24ZM25 38L26 38L34 30L31 28L32 27L34 27L36 25L37 26L35 28L37 30L39 32L38 33L36 31L34 30L33 32L35 34L30 39L28 40Z%22/></svg>',
+    'csdn': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23fc5531%22 fill-rule=%22evenodd%22 d=%22M-1 0L0 -1L62 -1L63 0L63 62L62 63L0 63L-1 62ZM11 26L13 24L13 20L24 9L26 9L28 7L40 7L42 9L44 9L46 11L48 11L49 12L49 18L46 21L44 19L42 19L38 15L30 15L21 24L21 30L19 32L19 36L21 38L21 40L26 45L28 45L30 47L38 47L40 45L42 45L46 41L48 41L51 44L51 50L50 51L48 51L46 53L44 53L42 55L26 55L24 53L20 53L13 46L13 44L11 42Z%22/><path fill=%22%23fefdfd%22 fill-rule=%22evenodd%22 d=%22M13 24L15 22L15 20L24 11L26 11L28 9L42 9L47 14L47 18L46 19L44 17L42 17L38 13L30 13L28 15L26 15L23 18L23 20L19 24L19 40L21 42L21 44L24 47L28 47L30 49L36 49L38 47L42 47L46 43L48 43L51 46L46 51L44 51L42 53L24 53L20 49L18 49L15 46L15 44L13 42Z%22/><path fill=%22%23fdb9aa%22 fill-rule=%22evenodd%22 d=%22M11 36L12 35L13 36L13 38L12 39L11 38Z%22/><path fill=%22%23fc6646%22 fill-rule=%22evenodd%22 d=%22M21 42L22 41L25 44L24 45ZM23 20L26 17L27 18L24 21Z%22/><path fill=%22%23feebe7%22 fill-rule=%22evenodd%22 d=%22M23 18L26 15L27 16L24 19ZM47 50L50 47L51 48L48 51Z%22/><path fill=%22%23fc856b%22 fill-rule=%22evenodd%22 d=%22M15 48L16 47L19 50L18 51Z%22/><path fill=%22%23fed5cc%22 fill-rule=%22evenodd%22 d=%22M11 32L12 31L13 32L13 34L12 35L11 34ZM17 16L20 13L21 14L18 17ZM31 48L32 47L34 47L35 48L34 49L32 49ZM31 54L32 53L36 53L37 54L36 55L32 55ZM33 8L34 7L36 7L37 8L36 9L34 9Z%22/></svg>',
+    'douban-group': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23007711%22 fill-rule=%22evenodd%22 d=%22M-1 2L2 -1L60 -1L63 2L63 60L60 63L2 63L-1 60ZM7 8L8 7L54 7L55 8L55 12L54 13L8 13L7 12ZM7 48L8 47L16 47L17 46L17 44L15 42L15 38L14 37L12 37L11 36L11 18L12 17L50 17L51 18L51 36L50 37L48 37L47 38L47 42L45 44L45 46L46 47L54 47L55 48L55 52L54 53L8 53L7 52ZM19 24L20 23L42 23L43 24L43 30L42 31L20 31L19 30ZM25 40L26 39L36 39L37 40L37 46L36 47L26 47L25 46Z%22/><path fill=%22%23fefefe%22 fill-rule=%22evenodd%22 d=%22M7 48L8 47L18 47L19 46L19 44L17 42L17 38L16 37L14 37L13 36L13 18L14 17L48 17L49 18L49 36L48 37L46 37L45 38L45 42L43 44L43 46L44 47L54 47L55 48L55 52L54 53L8 53L7 52ZM9 8L10 7L52 7L53 8L53 12L52 13L10 13L9 12ZM17 22L18 21L44 21L45 22L45 32L44 33L18 33L17 32ZM21 38L22 37L40 37L41 38L39 40L39 44L36 47L26 47L23 44L23 40Z%22/><path fill=%22%23d1e6d4%22 fill-rule=%22evenodd%22 d=%22M7 8L8 7L9 8L9 12L8 13L7 12ZM11 18L12 17L13 18L13 36L12 37L11 36ZM49 18L50 17L51 18L51 36L50 37L49 36ZM53 8L54 7L55 8L55 12L54 13L53 12Z%22/><path fill=%22%2380bb88%22 fill-rule=%22evenodd%22 d=%22M19 22L20 21L42 21L43 22L42 23L20 23ZM19 32L20 31L42 31L43 32L42 33L20 33Z%22/><path fill=%22%23b2d6b7%22 fill-rule=%22evenodd%22 d=%22M17 24L18 23L19 24L19 30L18 31L17 30ZM43 24L44 23L45 24L45 30L44 31L43 30Z%22/><path fill=%22%2320882f%22 fill-rule=%22evenodd%22 d=%22M23 38L24 37L38 37L39 38L39 40L38 41L36 39L26 39L24 41L23 40Z%22/></svg>',
+    'douban-movie': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23007711%22 fill-rule=%22evenodd%22 d=%22M-1 2L2 -1L60 -1L63 2L63 60L60 63L2 63L-1 60ZM7 8L8 7L54 7L55 8L55 12L54 13L8 13L7 12ZM7 48L8 47L16 47L17 46L17 44L15 42L15 38L14 37L12 37L11 36L11 18L12 17L50 17L51 18L51 36L50 37L48 37L47 38L47 42L45 44L45 46L46 47L54 47L55 48L55 52L54 53L8 53L7 52ZM19 24L20 23L42 23L43 24L43 30L42 31L20 31L19 30ZM25 40L26 39L36 39L37 40L37 46L36 47L26 47L25 46Z%22/><path fill=%22%23fefefe%22 fill-rule=%22evenodd%22 d=%22M7 48L8 47L18 47L19 46L19 44L17 42L17 38L16 37L14 37L13 36L13 18L14 17L48 17L49 18L49 36L48 37L46 37L45 38L45 42L43 44L43 46L44 47L54 47L55 48L55 52L54 53L8 53L7 52ZM9 8L10 7L52 7L53 8L53 12L52 13L10 13L9 12ZM17 22L18 21L44 21L45 22L45 32L44 33L18 33L17 32ZM21 38L22 37L40 37L41 38L39 40L39 44L36 47L26 47L23 44L23 40Z%22/><path fill=%22%23d1e6d4%22 fill-rule=%22evenodd%22 d=%22M7 8L8 7L9 8L9 12L8 13L7 12ZM11 18L12 17L13 18L13 36L12 37L11 36ZM49 18L50 17L51 18L51 36L50 37L49 36ZM53 8L54 7L55 8L55 12L54 13L53 12Z%22/><path fill=%22%2380bb88%22 fill-rule=%22evenodd%22 d=%22M19 22L20 21L42 21L43 22L42 23L20 23ZM19 32L20 31L42 31L43 32L42 33L20 33Z%22/><path fill=%22%23b2d6b7%22 fill-rule=%22evenodd%22 d=%22M17 24L18 23L19 24L19 30L18 31L17 30ZM43 24L44 23L45 24L45 30L44 31L43 30Z%22/><path fill=%22%2320882f%22 fill-rule=%22evenodd%22 d=%22M23 38L24 37L38 37L39 38L39 40L38 41L36 39L26 39L24 41L23 40Z%22/></svg>',
+    'douyin': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23000000%22 fill-rule=%22evenodd%22 d=%22M-1 4L4 -1L58 -1L63 4L63 58L58 63L4 63L-1 58ZM7 32L16 23L18 23L20 21L24 21L26 23L28 23L29 24L29 34L28 35L22 35L21 36L21 38L19 40L19 42L22 45L26 45L31 40L31 4L32 3L40 3L43 6L43 8L45 10L45 12L48 15L52 15L55 18L55 26L54 27L48 27L46 25L44 25L43 26L43 46L41 48L41 50L34 57L30 57L28 59L26 59L24 57L18 57L9 48L9 46L7 44Z%22/><path fill=%22%23ffffff%22 fill-rule=%22evenodd%22 d=%22M11 36L13 34L13 32L18 27L20 27L22 25L24 25L25 26L25 30L24 31L20 31L15 36L15 40L17 42L17 44L22 49L30 49L33 46L33 44L35 42L35 8L36 7L40 7L41 8L41 10L48 17L50 17L51 18L51 22L50 23L44 23L42 21L40 21L39 22L39 44L37 46L37 48L34 51L32 51L30 53L28 53L26 55L20 55L18 53L16 53L13 50L13 48L11 46Z%22/><path fill=%22%2300faf0%22 fill-rule=%22evenodd%22 d=%22M7 34L9 32L9 30L14 25L16 25L18 23L24 23L25 24L24 25L20 25L18 27L16 27L11 32L11 36L9 38L9 42L8 43L7 42ZM25 46L26 45L28 45L31 42L31 4L32 3L38 3L39 4L38 5L34 5L33 6L33 44L30 47L26 47Z%22/><path fill=%22%23bffefb%22 fill-rule=%22evenodd%22 d=%22M9 38L10 37L11 38L11 44L10 45L9 44ZM11 32L16 27L17 28L13 32L13 34L12 35L11 34ZM19 46L20 45L22 47L30 47L32 45L33 46L30 49L22 49ZM33 6L34 5L38 5L39 6L38 7L36 7L35 8L35 42L34 43L33 42Z%22/><path fill=%22%23ff0050%22 fill-rule=%22evenodd%22 d=%22M17 36L22 31L26 31L27 32L26 33L22 33L19 36L19 38L18 39L17 38ZM21 56L22 55L30 55L39 46L39 44L40 43L41 44L41 48L34 55L32 55L30 57L22 57ZM53 20L54 19L55 20L55 24L54 25L53 24Z%22/><path fill=%22%23bf003c%22 fill-rule=%22evenodd%22 d=%22M19 36L22 33L23 34L20 37ZM27 26L28 25L29 26L29 32L28 33L27 32ZM35 54L38 51L39 52L36 55ZM41 24L42 23L43 24L43 44L42 45L41 44ZM49 26L50 25L54 25L55 26L54 27L50 27Z%22/><path fill=%22%23ff80a7%22 fill-rule=%22evenodd%22 d=%22M15 36L20 31L21 32L17 36L17 40L16 41L15 40ZM25 26L26 25L27 26L27 30L26 31L25 30ZM27 54L28 53L30 53L32 51L33 52L30 55L28 55ZM39 22L40 21L42 21L43 22L41 24L41 42L40 43L39 42ZM41 10L42 9L47 14L46 15ZM47 24L48 23L50 23L51 22L51 18L52 17L53 18L53 24L52 25L48 25Z%22/><path fill=%22%2320000a%22 fill-rule=%22evenodd%22 d=%22M19 22L20 21L24 21L26 23L28 23L29 24L28 25L26 25L24 23L20 23ZM23 34L24 33L28 33L29 34L28 35L24 35ZM25 58L26 57L28 57L29 58L28 59L26 59ZM27 44L30 41L31 42L28 45Z%22/></svg>',
+    'earthquake': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23ed1a22%22 fill-rule=%22evenodd%22 d=%22M1 4L4 1L10 1L12 -1L14 1L18 1L20 -1L28 -1L30 1L34 1L36 -1L38 -1L40 1L44 1L46 -1L48 -1L51 2L50 3L48 3L44 7L42 7L40 9L38 9L34 13L32 13L27 18L30 21L34 21L36 19L38 19L42 15L44 15L46 13L48 13L52 9L54 9L56 7L58 7L59 8L59 10L61 12L58 15L54 15L50 19L48 19L46 21L44 21L42 23L40 23L33 30L33 32L34 33L38 33L40 31L44 31L48 27L50 27L52 25L54 25L58 21L60 21L61 22L61 28L60 29L58 29L56 31L52 31L48 35L44 35L42 37L40 37L38 39L36 39L32 43L28 43L26 45L24 45L22 47L20 47L18 49L16 49L10 55L6 55L4 57L1 54L4 51L6 51L8 49L10 49L14 45L18 45L22 41L24 41L26 39L28 39L29 38L29 34L28 33L24 33L22 35L20 35L18 37L16 37L12 41L10 41L8 43L6 43L2 47L1 46L1 42L4 39L6 39L10 35L12 35L16 31L18 31L25 24L25 20L24 19L22 19L16 25L14 25L10 29L8 29L4 33L2 33L1 32ZM9 60L12 57L14 57L16 55L20 55L22 53L24 53L26 51L28 51L30 49L32 49L34 47L38 47L40 45L42 45L44 43L48 43L50 41L52 41L54 39L58 39L60 37L61 38L61 60L60 61L30 61L28 63L14 63L12 61L10 61Z%22/><path fill=%22%23e83635%22 fill-rule=%22evenodd%22 d=%22M-1 8L0 7L1 8L1 12L0 13L-1 12ZM-1 26L0 25L1 26L1 32L3 34L2 35L-1 32ZM-1 44L0 43L1 44L1 46L2 47L6 43L7 44L2 49L-1 46ZM5 32L8 29L9 30L6 33ZM5 38L8 35L9 36L6 39ZM5 50L8 47L10 47L11 48L10 49L8 49L6 51ZM7 0L8 -1L10 -1L11 0L10 1L8 1ZM7 60L8 59L10 61L12 61L13 62L12 63L10 63ZM11 34L14 31L15 32L12 35ZM13 0L14 -1L18 -1L19 0L18 1L14 1ZM15 44L16 43L18 43L20 41L21 42L18 45L16 45ZM17 30L24 23L25 24L18 31ZM17 54L18 53L20 53L21 54L20 55L18 55ZM19 22L22 19L24 19L25 20L24 21L22 21L20 23ZM23 40L26 37L28 37L29 38L28 39L26 39L24 41ZM27 18L32 13L33 14L28 19ZM29 0L30 -1L34 -1L35 0L34 1L30 1ZM29 62L30 61L34 61L35 62L34 63L30 63ZM33 30L40 23L42 23L44 21L45 22L42 25L40 25L35 30L35 32L34 33L33 32ZM33 42L36 39L37 40L34 43ZM35 12L38 9L39 10L36 13ZM35 46L36 45L38 45L40 43L42 43L43 44L42 45L40 45L38 47L36 47ZM37 18L40 15L41 16L38 19ZM39 0L40 -1L44 -1L45 0L44 1L40 1ZM41 30L42 29L44 29L46 27L47 28L44 31L42 31ZM43 36L44 35L46 35L47 36L46 37L44 37ZM45 6L48 3L49 4L46 7ZM45 42L46 41L48 41L49 42L48 43L46 43ZM47 12L50 9L51 10L48 13ZM49 0L50 -1L53 2L52 3ZM49 34L52 31L54 31L55 32L54 33L52 33L50 35ZM51 18L54 15L55 16L52 19ZM55 38L56 37L58 37L59 38L58 39L56 39ZM57 6L58 5L61 8L61 10L60 11L59 10L59 8ZM57 30L58 29L60 29L61 28L61 22L59 20L60 19L63 22L63 28L60 31L58 31ZM61 40L62 39L63 40L63 58L62 59L61 58Z%22/></svg>',
+    'genshin': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23fdfaf0%22 fill-rule=%22evenodd%22 d=%22M-1 36L1 34L1 24L6 19L7 20L7 28L5 30L5 44L4 45L3 44L3 42L2 41L0 41L-1 40ZM7 10L8 9L9 10L9 14L8 15L7 14ZM11 12L12 11L13 12L13 14L12 15L11 14ZM11 20L12 19L13 20L13 22L12 23L11 22ZM19 18L20 17L22 17L24 15L27 18L27 22L29 24L28 25L26 23L24 23ZM21 6L22 5L24 5L30 -1L42 -1L43 0L43 2L36 9L32 9L30 11L29 10L29 8L26 5L25 6L25 8L24 9ZM21 26L22 25L24 27L28 27L30 29L32 27L35 30L35 32L34 33L32 33L30 35L24 35L21 32ZM25 30L26 29L28 29L29 30L26 33L25 32ZM29 16L30 15L34 19L38 19L39 20L38 21L34 21L33 22L33 24L32 25L31 24L31 22L29 20ZM33 14L36 11L40 11L41 12L41 14L43 16L42 17L40 17L38 15L34 15ZM39 52L40 51L42 51L45 48L45 46L47 44L47 38L49 36L49 32L50 31L56 31L57 32L57 34L55 36L55 40L53 42L53 44L46 51L44 51L42 53L40 53ZM45 18L46 17L53 24L52 25L48 25L47 24L47 20ZM47 0L48 -1L58 -1L63 4L62 5L60 5L58 3L57 4L57 6L59 8L59 12L58 13L52 13L51 12L51 8L55 4L55 2L54 1L48 1Z%22/><path fill=%22%23f7e7d4%22 fill-rule=%22evenodd%22 d=%22M-1 24L0 23L1 24L1 34L0 35L-1 34ZM-1 42L0 41L2 41L3 42L3 44L5 46L5 50L3 52L5 54L4 55L2 55L1 54L1 44ZM5 30L6 29L7 30L7 32L6 33L5 32ZM9 10L10 9L12 9L13 10L12 11L10 11ZM11 32L12 31L14 33L16 33L18 35L20 33L22 33L24 35L30 35L32 33L34 33L35 32L35 30L32 27L26 33L25 32L25 30L26 29L28 29L29 28L27 26L29 24L27 22L27 18L24 15L22 17L20 17L19 16L20 15L22 15L25 12L23 10L24 9L27 12L27 16L29 18L29 20L31 22L31 24L32 25L34 25L38 29L40 27L44 27L45 28L45 32L43 34L43 36L36 43L30 43L28 45L26 45L24 43L20 43L13 36L13 34ZM13 18L14 17L15 18L15 20L14 21L13 20ZM21 24L22 23L25 26L24 27ZM23 4L24 3L29 8L28 9ZM31 10L32 9L40 9L43 12L43 14L42 15L41 14L41 12L40 11L36 11L33 14L33 16L34 17L36 15L38 15L39 16L36 19L34 19L31 16ZM31 36L32 35L34 35L35 36L34 37L32 37ZM33 22L34 21L38 21L40 19L41 20L41 22L40 23L34 23ZM41 50L44 47L45 48L42 51ZM45 42L46 41L47 42L47 44L46 45L45 44ZM47 30L48 29L52 29L53 30L52 31L48 31ZM47 34L48 33L49 34L49 36L48 37L47 36ZM49 48L52 45L53 46L50 49ZM51 26L52 25L54 25L55 26L54 27L52 27ZM53 16L56 13L58 15L60 15L63 18L62 19L60 17L59 18L59 20L58 21ZM55 36L56 35L57 36L57 38L56 39L55 38ZM57 4L58 3L60 5L62 5L63 6L62 7L58 7L57 6ZM59 0L60 -1L63 2L62 3Z%22/><path fill=%22%23d6c5b6%22 fill-rule=%22evenodd%22 d=%22M-1 44L0 43L1 44L1 54L0 55L-1 54ZM5 34L6 33L8 33L11 36L11 38L12 39L14 37L15 38L15 40L18 43L22 43L23 44L23 46L22 47L20 47L16 51L14 49L12 49L8 45L7 46L7 48L6 49L5 48ZM7 20L8 19L11 22L9 24L11 26L11 28L10 29L8 29L7 28ZM13 22L14 21L16 21L17 20L15 18L16 17L18 17L19 18L19 20L20 21L22 21L27 26L26 27L22 23L20 25L19 24L19 22L18 21L16 23L14 23ZM13 28L14 27L15 28L15 30L16 31L18 29L21 32L20 33L18 31L16 33L13 30ZM17 10L20 7L23 10L22 11L20 9L18 11ZM21 60L22 59L26 59L28 57L30 57L32 59L34 59L36 57L38 57L41 60L40 61L38 61L36 59L34 61L22 61ZM25 8L26 7L31 12L30 13L28 13L25 10ZM29 44L30 43L34 43L35 44L34 45L30 45ZM31 36L32 35L34 35L35 36L34 37L32 37ZM37 18L38 17L42 17L43 16L43 14L44 13L45 14L45 18L46 19L47 18L47 16L48 15L49 16L49 18L51 20L50 21L48 19L44 23L43 22L43 20L42 19L38 19ZM37 26L38 25L44 25L46 27L48 25L50 25L51 26L47 30L49 32L47 34L47 40L45 42L45 46L44 47L43 46L43 44L42 43L38 43L37 42L47 32L45 30L45 28L44 27L38 27ZM41 4L42 3L44 3L47 6L46 7L42 7L41 6ZM41 10L42 9L46 9L49 12L48 13L46 11L42 11ZM49 2L50 1L54 1L55 2L55 4L52 7L51 6L53 4L52 3L50 3ZM51 14L52 13L54 13L56 15L58 13L59 14L56 17L54 15L52 15ZM53 28L54 27L58 27L60 29L62 29L63 30L63 54L62 55L58 55L56 53L54 55L53 54L55 52L55 46L53 44L55 42L55 40L57 38L57 34L59 32L58 31L56 31ZM55 20L56 19L58 21L60 21L61 22L60 23L58 23ZM59 8L60 7L62 7L63 8L63 14L62 15L61 14L61 10Z%22/><path fill=%22%232c264d%22 fill-rule=%22evenodd%22 d=%22M-1 58L0 57L8 57L11 60L11 62L10 63L0 63L-1 62ZM11 26L14 23L16 25L18 23L19 24L19 26L18 27L16 27L14 25L12 27ZM19 50L22 47L26 47L28 45L40 45L41 46L41 50L40 51L38 49L35 52L35 54L36 55L38 55L39 56L38 57L36 57L34 55L32 57L26 57L25 56L25 54L24 53L20 53L19 52ZM35 62L36 61L38 61L39 62L38 63L36 63ZM39 24L40 23L42 23L43 24L42 25L40 25ZM45 2L46 1L48 3L52 3L53 4L51 6L51 8L50 9L49 8L49 6ZM45 62L46 61L48 61L51 58L51 54L52 53L53 54L53 56L54 57L62 57L63 58L63 62L62 63L46 63Z%22/><path fill=%22%23feb54c%22 fill-rule=%22evenodd%22 d=%22M-1 0L0 -1L26 -1L27 0L18 9L16 9L14 11L11 8L11 6L10 5L7 8L7 10L5 12L5 14L7 16L7 18L6 19L4 19L0 23L-1 22ZM7 32L8 31L10 31L11 32L11 34L13 36L12 37ZM7 52L8 51L12 51L13 52L12 53L8 53ZM9 12L10 11L11 12L11 14L10 15L9 14ZM13 14L14 13L16 15L17 14L17 12L18 11L19 12L19 14L16 17L14 17L13 16ZM49 18L50 17L52 19L54 19L58 23L62 23L63 24L62 25L58 25L56 23L54 23Z%22/><path fill=%22%23050315%22 fill-rule=%22evenodd%22 d=%22M9 58L10 57L18 57L19 56L19 54L17 52L17 50L18 49L19 50L19 52L20 53L24 53L25 54L25 56L24 57L20 57L19 58L19 62L18 63L12 63L11 62L11 60ZM39 56L40 55L44 55L46 53L48 53L54 47L55 48L53 50L53 52L51 54L51 58L48 61L46 61L44 63L43 62L43 58L42 57L40 57Z%22/><path fill=%22%23f4d5b7%22 fill-rule=%22evenodd%22 d=%22M1 22L4 19L5 20L2 23ZM3 52L7 48L7 46L8 45L12 49L14 49L15 50L15 54L14 55L6 55ZM5 12L6 11L7 12L7 14L9 16L9 18L10 19L11 18L11 16L12 15L13 16L13 18L10 21L7 18L7 16L5 14ZM7 8L8 7L10 7L11 8L10 9L8 9ZM7 52L8 51L12 51L13 52L12 53L8 53ZM9 30L10 29L12 29L13 30L12 31L10 31ZM13 12L16 9L17 10L17 14L19 16L18 17ZM15 40L16 39L19 42L18 43ZM19 12L20 11L24 11L25 12L24 13L20 13ZM25 2L28 -1L29 0L26 3ZM27 14L28 13L30 13L31 14L28 17L27 16ZM33 24L34 23L36 23L37 24L36 25L34 25ZM43 12L44 11L47 14L47 16L46 17L45 16L45 14ZM45 22L46 21L47 22L47 26L46 27L45 26ZM49 28L50 27L52 27L55 30L54 31L52 29L50 29ZM51 18L52 17L54 17L55 18L54 19L52 19ZM55 26L56 25L58 25L60 27L62 25L63 26L63 28L62 29L60 29L58 27L56 27ZM59 12L60 11L61 12L61 14L60 15L59 14ZM59 18L60 17L63 20L63 22L62 23L59 20Z%22/><path fill=%22%23615764%22 fill-rule=%22evenodd%22 d=%22M-1 56L0 55L10 55L11 56L10 57L0 57ZM11 24L12 23L17 28L16 29L14 27L12 29L11 28L13 26ZM13 56L14 55L16 55L17 54L15 52L16 51L19 54L19 56L20 57L26 57L27 58L26 59L22 59L21 60L22 61L26 61L27 62L26 63L22 63L19 60L19 58L18 57L14 57ZM17 32L19 30L19 26L20 25L21 26L21 30L18 33ZM23 46L24 45L26 45L27 46L26 47L24 47ZM29 62L30 61L34 61L35 60L34 59L32 59L31 58L32 57L34 57L37 60L34 63L30 63ZM35 26L38 23L39 24L36 27ZM35 44L36 43L42 43L43 44L43 48L42 49L41 48L41 46L40 45L36 45ZM35 52L36 51L38 51L40 53L42 53L43 54L42 55L36 55L35 54ZM39 8L40 7L46 7L47 6L43 2L43 0L44 -1L45 0L45 2L46 3L48 1L49 2L47 4L49 6L49 8L51 10L51 12L50 13L46 9L40 9ZM39 58L40 57L42 57L43 58L43 60L40 63L39 62L41 60ZM49 50L54 45L55 46L50 51ZM53 56L54 55L62 55L63 56L62 57L54 57Z%22/></svg>',
+    'github': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23171515%22 fill-rule=%22evenodd%22 d=%22M-1 24L1 22L1 18L3 16L3 14L14 3L16 3L18 1L22 1L24 -1L38 -1L40 1L44 1L46 3L48 3L59 14L59 16L61 18L61 22L63 24L63 38L61 40L61 44L59 46L59 48L48 59L46 59L44 61L40 61L39 60L39 48L37 46L38 45L42 45L44 43L46 43L49 40L49 38L51 36L51 24L49 22L49 14L48 13L42 13L40 15L22 15L20 13L14 13L13 14L13 22L11 24L11 36L13 38L13 40L14 41L16 41L18 43L20 43L22 45L24 45L25 46L20 51L18 49L16 49L10 43L9 44L9 46L13 50L13 52L14 53L16 53L18 55L22 55L23 56L23 60L22 61L18 61L16 59L14 59L3 48L3 46L1 44L1 40L-1 38Z%22/></svg>',
+    'hellogithub': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23050505%22 fill-rule=%22evenodd%22 d=%22M-1 20L0 19L2 19L3 18L4 12L6 12L7 10L7 8L8 7L10 7L12 6L12 4L18 3L19 2L19 0L20 -1L42 -1L43 0L43 2L44 3L50 4L50 6L52 7L54 7L55 8L55 10L56 12L58 12L59 18L58 19L56 19L55 18L55 16L54 15L52 15L52 12L50 11L48 11L46 12L46 14L44 14L43 16L42 23L40 23L39 24L39 30L38 32L36 32L34 42L32 42L31 44L30 50L28 50L27 44L28 40L26 38L20 38L18 40L15 40L14 48L15 54L16 55L22 56L22 58L24 59L38 59L40 58L40 56L46 55L47 54L47 52L50 52L52 50L52 47L54 47L55 46L56 40L54 38L40 38L40 36L44 35L62 35L63 36L63 42L62 43L60 43L59 44L58 50L56 50L55 52L55 54L54 55L52 55L50 56L50 58L44 59L43 60L43 62L42 63L20 63L19 62L19 60L18 59L12 58L12 56L10 55L8 55L7 54L7 52L6 50L4 50L3 44L2 43L0 43L-1 42ZM3 24L4 22L6 22L7 16L8 15L10 15L10 12L12 10L15 10L15 8L16 7L22 6L22 4L24 3L38 3L40 4L40 6L42 6L43 8L43 10L42 12L40 12L38 22L36 22L35 24L35 30L34 31L32 31L31 32L31 34L30 35L24 35L23 34L23 24L22 23L20 23L19 24L19 30L16 30L15 32L15 38L14 39L12 39L11 46L10 46L7 46L7 44L6 42L6 40L4 40L3 38Z%22/></svg>',
+    'history': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23fefefe%22 fill-rule=%22evenodd%22 d=%22M-1 4L2 1L4 -1L6 -1L56 -1L58 -1L60 1L63 4L63 8L63 56L63 58L61 60L58 63L54 63L6 63L4 63L2 61L-1 58L-1 56ZM5 20L8 17L12 17L14 17L17 20L18 26L17 30L14 33L10 33L8 32L6 30L5 28ZM7 46L9 42L25 26L28 24L32 23L34 25L36 25L39 28L41 32L51 40L53 44L53 52L48 57L44 59L40 59L36 57L26 57L18 59L16 59L14 57L12 57L9 54L9 52L7 50ZM15 10L18 5L22 3L24 3L29 8L29 16L24 21L22 21L17 18L17 16L15 14ZM15 44L20 39L24 39L25 38L25 34L26 33L27 34L28 36L28 50L26 52L22 52L18 51L15 48ZM18 46L19 44L22 42L24 42L25 44L25 48L24 49L20 49ZM31 10L34 5L36 3L40 3L45 8L45 16L40 21L36 21L33 18L33 16L31 14ZM33 40L34 39L35 40L35 48L36 49L38 49L40 49L41 48L41 40L42 39L43 40L43 50L42 52L36 52L33 50ZM43 22L46 17L52 17L54 19L56 22L57 26L55 30L52 33L48 33L46 32L43 28Z%22/><path fill=%22%232a33e1%22 fill-rule=%22evenodd%22 d=%22M5 24L7 22L7 20L10 17L12 17L17 22L17 28L14 31L8 31L7 30L7 28L5 26ZM9 44L23 30L24 28L28 25L34 25L39 30L42 35L46 37L51 42L51 44L52 46L52 48L50 53L46 57L38 57L36 56L34 55L32 55L28 55L24 57L16 57L14 57L9 52ZM15 42L18 39L22 39L24 38L24 34L26 33L28 33L29 34L29 52L28 53L18 53L15 50L14 46ZM18 8L20 5L24 5L26 7L28 12L26 18L20 19L17 16L17 10ZM20 44L22 43L24 44L24 46L24 48L22 49L21 48L19 46ZM31 40L32 39L34 39L35 40L35 46L36 48L38 49L39 48L39 40L42 38L45 40L45 52L44 53L34 53L31 50ZM33 8L36 5L40 5L43 8L44 12L43 14L43 16L40 19L36 19L33 16ZM45 20L50 17L55 22L55 28L52 31L46 31L45 30Z%22/><path fill=%22%23c8caf7%22 fill-rule=%22evenodd%22 d=%22M15 10L16 8L17 10L16 12L17 14L16 16L15 14L15 12ZM14 58L16 57L22 57L24 58L22 59L16 59ZM19 40L24 41L25 42L22 43L20 42ZM19 52L20 51L26 51L27 50L27 36L26 34L28 33L29 34L29 38L29 52L28 53L20 53ZM27 24L28 23L32 23L34 24L32 25L28 25ZM32 8L36 3L37 4L32 8L33 10L33 14L32 16L31 14L31 10ZM31 40L32 39L34 40L33 48L33 50L34 51L38 50L42 51L43 52L42 53L34 53L32 50L31 48ZM37 58L40 57L47 58L44 59L40 59ZM46 36L46 35L48 37L53 42L52 43Z%22/><path fill=%22%23e8e9fc%22 fill-rule=%22evenodd%22 d=%22M0 6L0 4L2 2L6 0L56 0L60 2L62 4L63 8L62 56L60 60L58 62L54 63L6 62L2 60L0 58L0 56ZM6 20L8 17L14 17L17 20L17 30L14 33L10 33L5 28L5 22ZM7 46L9 44L9 42L26 25L28 25L30 23L32 23L34 25L36 25L39 28L39 30L41 32L46 37L51 40L51 42L53 44L53 52L48 57L46 57L44 59L42 59L38 57L24 57L18 59L16 58L12 57L9 54L9 52L7 50L7 48ZM15 12L18 6L22 3L24 3L29 8L29 16L24 21L22 21L20 19L17 18ZM15 44L20 39L24 39L25 38L25 34L26 33L28 34L29 36L29 50L27 52L26 53L22 53L20 52L15 48ZM19 44L20 43L24 43L25 44L25 48L24 49L20 49L19 48ZM31 12L33 8L33 6L38 3L42 5L45 8L45 16L42 19L38 21L36 20L34 19L33 18L33 16ZM32 40L34 39L35 40L35 48L36 49L40 49L41 48L41 40L42 39L43 40L43 52L42 53L36 53L32 48ZM43 22L48 17L52 17L55 20L56 22L57 24L57 26L55 28L55 30L52 33L48 33L43 28Z%22/><path fill=%22%23434be4%22 fill-rule=%22evenodd%22 d=%22M6 22L8 21L10 17L12 17L14 21L16 21L17 22L17 28L16 29L12 30L12 31L11 30L10 30L8 31L7 30L8 28L6 28L5 26ZM9 44L13 42L12 41L12 40L14 41L16 38L17 38L18 36L24 30L23 28L24 27L26 26L32 26L34 25L36 28L51 42L50 45L52 45L53 46L53 48L52 51L50 51L50 52L51 54L50 55L48 53L47 54L47 56L46 57L42 56L36 57L34 56L35 54L36 54L42 53L46 52L46 42L47 40L44 39L38 39L38 48L36 49L35 46L35 40L34 39L32 39L30 40L30 50L30 34L28 33L26 33L25 34L25 38L24 39L18 38L14 42L15 46L14 50L17 52L18 54L28 54L26 57L16 56L14 57L12 54L9 52L10 48ZM17 8L20 5L24 6L26 5L27 6L25 8L26 10L28 10L29 12L28 14L26 14L25 16L27 18L26 19L24 18L20 19L17 16L18 12ZM19 44L20 43L22 44L24 43L25 44L25 48L24 49L20 48L21 46L20 46ZM30 52L30 50L33 52L32 54L30 53ZM33 8L36 6L40 6L42 8L42 10L44 10L45 12L44 14L42 14L41 16L42 18L36 18L33 16L34 12ZM45 20L48 17L52 18L51 20L52 21L54 20L54 29L50 30L50 31L49 30L48 30L46 31L45 30L46 28L46 26L46 22Z%22/><path fill=%22%23a5a9f2%22 fill-rule=%22evenodd%22 d=%22M7 46L8 45L9 46L9 50L8 51L7 50ZM15 36L20 31L21 32L16 37ZM33 18L34 17L36 20L40 19L41 20L40 21L36 20Z%22/><path fill=%22%23141ede%22 fill-rule=%22evenodd%22 d=%22M7 20L8 19L12 18L15 20L17 24L17 26L16 28L14 31L10 31L8 30L6 26ZM9 44L28 25L32 25L36 27L41 34L50 42L51 48L51 52L46 56L44 57L38 56L36 55L34 55L26 55L22 57L16 57L12 55L10 52L9 50ZM13 46L15 42L17 40L18 39L23 38L24 33L28 32L29 34L29 52L28 53L18 53L15 50ZM17 10L20 6L24 5L27 8L27 16L26 17L24 19L20 19L17 14ZM19 46L22 43L23 44L23 48L22 49ZM32 38L34 37L36 39L36 46L38 49L39 48L39 40L40 38L42 37L44 39L45 40L45 52L44 53L36 53L31 52L31 40ZM33 10L36 5L40 5L43 8L43 16L40 19L36 19L34 16ZM46 20L50 18L55 22L55 28L52 31L48 31L46 30L45 28L45 22Z%22/><path fill=%22%23747aeb%22 fill-rule=%22evenodd%22 d=%22M25 56L28 55L34 55L36 56L34 57L28 57ZM39 40L40 39L41 40L41 48L40 49L39 48ZM43 24L44 22L45 24L44 28ZM43 40L44 39L45 40L45 52L44 53L43 52Z%22/></svg>',
+    'hupu': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23c60100%22 fill-rule=%22evenodd%22 d=%22M-1 8L1 4L4 1L8 -1L10 -1L52 -1L54 -1L58 1L61 4L63 8L63 10L63 52L61 58L58 61L54 63L52 63L10 63L8 63L4 61L1 58L-1 54L-1 52ZM6 20L7 18L8 17L16 17L17 16L17 10L20 7L22 7L24 8L30 10L31 14L32 15L36 16L35 24L34 26L32 27L30 25L29 26L29 30L30 34L29 36L32 42L37 40L37 36L36 35L32 35L30 34L31 30L32 29L36 28L38 26L39 16L41 14L41 12L42 11L50 11L51 12L51 18L55 20L55 32L61 38L58 41L56 41L55 42L55 50L52 53L48 52L47 50L47 44L46 43L43 44L43 52L42 53L36 53L35 50L34 49L32 51L30 51L28 53L26 53L25 52L24 48L22 45L21 46L21 52L20 53L16 53L14 52L15 48L15 42L15 40L17 38L17 34L16 32L13 40L13 48L10 53L5 50L5 46L7 42L7 32L9 28L7 26L7 22ZM43 34L44 33L46 33L47 34L47 36L44 37L43 36ZM45 20L46 19L48 19L49 20L48 27L46 26L45 24Z%22/><path fill=%22%23fefefe%22 fill-rule=%22evenodd%22 d=%22M7 20L8 19L14 19L18 17L19 16L19 10L20 9L22 9L24 11L28 11L29 12L24 15L23 16L24 17L30 17L34 15L35 16L35 24L34 25L32 25L31 24L31 22L30 21L24 21L23 22L23 24L24 25L26 25L27 26L26 29L24 29L23 30L24 31L28 31L29 32L29 34L28 35L26 35L24 36L20 37L19 36L19 32L18 31L14 31L13 32L13 40L11 44L11 50L10 51L8 51L7 50L7 42L9 38L9 26L7 22ZM15 24L16 23L18 23L19 24L16 27L15 26ZM15 48L17 42L18 41L20 41L22 39L28 39L29 40L29 42L30 44L34 43L38 40L39 34L38 33L34 33L32 33L31 32L34 29L38 29L39 28L39 22L42 19L43 20L43 26L47 30L43 32L43 36L46 40L45 42L42 44L41 46L41 50L40 52L38 51L37 50L37 48L36 47L26 53L25 50L25 44L24 43L22 43L19 46L19 52L18 53L15 50ZM49 20L50 19L52 19L53 20L53 32L59 38L58 39L56 39L54 38L53 40L53 50L52 51L50 51L49 50Z%22/><path fill=%22%23d54544%22 fill-rule=%22evenodd%22 d=%22M14 34L16 31L18 32L18 36L20 37L22 38L24 37L25 38L24 39L22 38L20 39L16 41L13 36ZM14 34L16 33L18 34L18 36L16 39L14 38L15 36ZM17 10L20 7L23 8L20 9L19 10L19 16L18 17L17 16ZM26 22L28 21L30 21L31 22L31 24L32 25L34 26L36 28L34 26L32 27ZM28 36L30 34L28 36L31 38L31 40L32 42L32 42L30 42L29 40L29 38ZM43 18L44 17L45 18L44 20L45 24L46 26L48 26L49 32L48 40L46 36L47 34L45 32L47 30L48 28L46 26L44 27L43 26L44 20ZM48 52L50 51L52 51L53 50L53 40L54 39L55 40L55 50L52 53L50 53ZM53 20L54 19L55 20L55 30L54 31L53 30Z%22/><path fill=%22%23ca1514%22 fill-rule=%22evenodd%22 d=%22M0 8L2 4L4 2L10 -1L52 -1L58 2L60 4L63 10L63 52L60 58L58 60L52 63L10 63L4 60L2 58L-1 52ZM5 46L7 44L7 34L9 28L7 24L7 18L8 17L16 17L17 16L17 10L20 7L22 7L24 9L28 9L31 12L31 14L34 15L36 16L35 20L35 24L32 27L30 23L29 26L29 36L32 43L34 41L36 41L37 40L37 36L36 35L32 35L31 34L31 30L32 29L36 29L39 26L39 18L41 14L41 12L42 11L48 11L50 11L51 12L51 18L54 20L55 30L55 32L59 36L60 38L58 41L55 42L55 50L52 53L50 53L47 50L47 44L44 43L43 44L43 52L42 53L38 53L36 52L36 50L34 49L32 51L30 51L28 53L26 53L25 52L25 48L24 46L22 45L21 46L21 52L20 53L16 53L15 52L15 42L18 38L17 36L16 32L15 36L13 38L13 48L10 52L6 51L5 50ZM43 34L44 33L46 33L47 34L47 36L46 37L44 37ZM45 20L48 19L49 20L49 24L48 31L47 28L45 26Z%22/><path fill=%22%23dc6766%22 fill-rule=%22evenodd%22 d=%22M17 32L18 31L19 32L19 36L21 38L18 41L17 40L18 38L17 36ZM20 8L22 7L24 9L28 9L31 12L31 14L30 15L29 14L29 12L28 11L24 11L22 9ZM43 12L44 11L45 12L44 14L44 16L48 18L46 19L45 20L44 26L43 20L44 18L44 16L44 14ZM45 32L46 31L48 32L49 40L48 47L48 44L45 42L47 40L48 34Z%22/><path fill=%22%23e79797%22 fill-rule=%22evenodd%22 d=%22M23 16L24 15L26 15L28 14L30 16L28 17L26 16L24 17ZM24 22L26 22L29 24L28 25L26 24L24 25L23 24ZM34 34L38 33L39 34L39 38L38 39L36 35ZM41 12L42 11L44 12L46 11L47 12L47 14L50 16L51 18L50 19L48 16L46 18L44 17L42 19L40 18L42 16L41 14ZM47 44L48 42L49 48L49 50L48 51L47 50ZM53 32L54 31L59 36L58 37Z%22/><path fill=%22%23f9e8e8%22 fill-rule=%22evenodd%22 d=%22M7 20L8 19L12 19L16 17L18 17L19 16L19 10L20 9L22 9L24 11L28 11L29 12L27 14L23 16L24 17L28 17L30 17L32 15L34 15L35 16L35 24L34 25L32 25L31 22L30 21L26 21L24 21L23 22L23 24L24 25L26 25L28 26L26 29L24 29L23 30L24 31L28 31L29 32L28 35L26 35L24 37L20 37L19 36L19 32L18 31L14 31L13 32L13 42L11 44L11 50L8 51L7 50L7 42L7 40L9 38L9 28L9 26L8 24ZM15 24L16 23L18 23L19 24L16 27ZM16 44L16 42L20 41L22 39L28 39L29 42L30 43L34 43L39 38L39 34L38 33L36 33L32 34L31 32L34 29L38 29L39 28L39 22L40 20L42 19L43 20L43 26L44 27L46 28L47 30L46 31L44 31L43 32L43 36L47 40L41 46L41 52L40 53L38 51L37 48L36 47L34 49L32 49L30 51L28 51L26 53L25 52L25 44L24 43L19 46L19 52L18 53L16 52L15 48ZM47 12L48 11L50 11L51 12L51 14L50 16L48 14ZM49 20L50 19L52 19L53 20L53 32L59 38L56 40L54 39L53 40L53 50L52 51L49 50Z%22/><path fill=%22%23f2c7c7%22 fill-rule=%22evenodd%22 d=%22M15 42L16 41L17 42L17 46L16 48ZM24 14L26 13L28 13L30 15L33 16L32 17L30 17L28 15ZM23 22L24 21L26 23L28 24L29 26L28 28L26 25L24 24ZM32 30L34 30L32 32L35 34L34 35L32 35L31 34ZM41 44L42 43L43 44L42 49ZM45 14L46 12L48 12L49 12L51 16L50 17L46 17L45 16Z%22/></svg>',
+    'huxiu': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23fefefe%22 fill-rule=%22evenodd%22 d=%22M0 24L2 18L5 12L10 7L14 4L24 0L30 -1L38 0L44 2L50 5L54 9L58 14L62 24L63 30L62 38L60 44L57 50L52 55L48 58L38 62L32 63L24 62L18 60L12 57L7 52L4 48L0 38L-1 32ZM18 46L19 44L19 42L19 16L20 15L24 18L28 18L29 16L29 8L30 7L32 7L35 10L33 12L34 13L38 13L39 14L36 17L34 16L33 18L34 19L40 18L42 16L45 18L45 20L42 23L40 23L38 21L34 21L33 22L34 24L36 23L38 25L39 26L38 27L34 27L33 28L34 29L40 29L42 28L43 30L43 32L42 33L30 33L29 32L29 28L28 27L26 27L25 26L26 24L28 24L29 22L28 21L24 21L23 22L23 44L21 46L20 50L18 53L17 52L17 48ZM23 50L25 46L25 36L26 35L34 35L38 35L39 36L39 46L40 47L42 47L46 43L47 44L47 50L46 51L36 51L35 50L35 40L34 39L32 39L30 40L30 42L27 50L24 52Z%22/><path fill=%22%23d7d6d6%22 fill-rule=%22evenodd%22 d=%22M16 52L18 51L20 49L24 51L25 50L22 47L22 44L23 46L26 49L28 47L29 48L24 53L22 53L20 51L18 53ZM23 18L24 17L26 17L28 17L29 18L28 19L26 19L24 19ZM25 24L26 23L28 23L29 24L28 25L26 26ZM29 36L30 35L34 35L35 36L34 37L32 37L30 37ZM33 16L34 15L36 15L38 13L39 14L39 16L40 17L42 15L44 16L40 19L34 18ZM33 24L34 23L38 23L40 21L41 22L41 24L38 27L36 25L34 25ZM43 44L46 41L47 42L47 44L44 47L43 46Z%22/><path fill=%22%23393536%22 fill-rule=%22evenodd%22 d=%22M19 18L20 17L23 20L21 22L22 24L22 36L21 40L21 46L20 47L19 46ZM29 10L30 9L32 10L31 12L33 14L31 18L33 20L31 22L33 26L31 28L34 31L38 31L40 30L41 32L40 33L32 33L29 30ZM36 38L37 40L37 46L38 48L42 49L44 48L45 48L44 50L38 50L35 48L35 40Z%22/><path fill=%22%23494646%22 fill-rule=%22evenodd%22 d=%22M19 18L20 17L22 18L23 24L23 38L21 42L21 46L20 47L19 46L19 38ZM29 10L30 9L31 10L33 14L32 18L33 20L31 22L33 26L31 28L32 30L34 32L36 32L38 32L40 29L41 30L40 32L32 32L29 30L30 20ZM35 40L36 39L37 40L37 48L38 49L40 47L42 47L44 49L46 48L46 48L44 51L38 51L35 48Z%22/><path fill=%22%23777575%22 fill-rule=%22evenodd%22 d=%22M31 28L32 27L34 29L38 29L40 30L38 31L34 31ZM36 36L38 36L39 38L39 46L38 47L37 46L37 38ZM39 20L40 20L42 22L43 20L42 18L44 17L45 18L45 20L42 22L40 20Z%22/><path fill=%22%23989697%22 fill-rule=%22evenodd%22 d=%22M23 20L24 19L26 19L28 19L29 20L28 21L26 21L24 21ZM26 36L27 36L26 38L27 44L26 45L25 44ZM29 38L30 37L34 37L36 35L38 35L39 36L38 37L36 37L34 39L30 39ZM33 20L34 19L40 19L42 21L44 19L44 20L42 23L40 21L34 21Z%22/><path fill=%22%23aba9aa%22 fill-rule=%22evenodd%22 d=%22M25 36L26 35L27 36L27 44L26 45L25 42ZM30 38L30 37L32 36L34 37L36 35L38 36L36 37L34 39L32 39Z%22/><path fill=%22%231a1617%22 fill-rule=%22evenodd%22 d=%22M27 38L28 37L29 38L29 40L29 44L28 45L27 42ZM31 30L32 29L34 31L40 31L41 32L40 33L32 32ZM35 38L36 37L37 38L36 40L36 46L39 48L38 49L36 48L36 46L36 40Z%22/></svg>',
+    'ifanr': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23f13a02%22 fill-rule=%22evenodd%22 d=%22M5 6L6 5L56 5L57 6L57 56L56 57L6 57L5 56ZM7 8L8 7L54 7L55 8L55 54L54 55L8 55L7 54ZM17 20L18 19L30 19L33 22L33 24L37 28L37 30L41 34L40 35L38 33L36 35L34 33L32 33L30 35L26 31L24 31L23 30L23 28L19 24L19 22Z%22/><path fill=%22%23f96607%22 fill-rule=%22evenodd%22 d=%22M25 32L26 31L30 35L32 33L34 33L36 31L43 38L43 40L47 44L44 47L34 47L31 44L31 42L29 40L29 38L25 34Z%22/><path fill=%22%23f91c00%22 fill-rule=%22evenodd%22 d=%22M13 14L14 13L26 13L31 18L30 19L16 19L15 18L15 16Z%22/><path fill=%22%23ff830a%22 fill-rule=%22evenodd%22 d=%22M35 48L36 47L44 47L45 46L43 44L44 43L49 48L48 49L36 49Z%22/></svg>',
+    'ithome': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23d22222%22 fill-rule=%22evenodd%22 d=%22M0 6L4 5L60 5L62 6L63 10L63 50L62 52L60 53L48 53L47 54L47 60L46 62L36 54L34 53L4 53L2 53L0 52L-1 50L-1 48L-1 8ZM11 14L12 13L20 13L21 14L21 44L20 45L12 45L11 44ZM27 14L28 13L52 13L53 14L53 22L52 23L46 23L45 24L45 44L44 45L36 45L35 44L35 24L34 23L28 23L27 22Z%22/><path fill=%22%23ffffff%22 fill-rule=%22evenodd%22 d=%22M11 14L12 13L20 13L21 14L21 44L20 45L12 45L11 44ZM27 14L28 13L52 13L53 14L53 22L52 23L46 23L45 24L45 44L44 45L36 45L35 44L35 24L34 23L28 23L27 22Z%22/></svg>',
+    'jianshu': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23e56048%22 fill-rule=%22evenodd%22 d=%22M-1 4L4 -1L58 -1L63 4L63 58L58 63L4 63L-1 58ZM7 16L13 10L13 8L14 7L20 7L21 8L21 10L22 11L34 11L35 10L35 8L36 7L42 7L43 8L43 10L44 11L54 11L55 12L55 14L54 15L50 15L49 16L49 18L50 19L52 19L53 20L53 50L48 55L42 55L39 52L39 50L40 49L46 49L47 48L47 26L46 25L22 25L21 26L22 27L42 27L43 28L43 44L40 47L20 47L19 46L19 28L18 27L16 27L15 28L15 54L14 55L10 55L9 54L9 26L10 25L12 25L13 24L13 22L10 19L8 21L7 20ZM13 18L16 15L18 15L19 16L19 18L21 20L20 21L18 19L14 19ZM25 16L26 15L28 15L29 16L29 18L28 19ZM27 32L28 31L34 31L35 32L35 34L34 35L28 35L27 34ZM27 40L28 39L34 39L35 40L35 42L34 43L28 43L27 42ZM35 18L36 17L38 17L40 15L42 15L43 16L43 18L42 19L36 19Z%22/><path fill=%22%23fefefe%22 fill-rule=%22evenodd%22 d=%22M7 18L15 10L15 8L16 7L18 7L19 8L19 10L20 11L30 11L31 12L30 13L24 13L23 14L25 16L24 17L22 17L18 13L16 13L10 19L8 19ZM11 28L12 27L14 27L15 28L15 52L14 53L12 53L11 52ZM13 20L14 19L16 19L19 22L19 24L18 25L16 25L15 24L15 22ZM21 30L22 29L40 29L41 30L41 42L36 47L22 47L21 46ZM23 22L24 21L50 21L51 22L51 50L48 53L42 53L41 52L42 51L46 51L47 50L47 24L46 23L24 23ZM25 32L26 31L36 31L37 32L37 36L36 37L26 37L25 36ZM25 40L26 39L36 39L37 40L37 44L36 45L26 45L25 44ZM31 18L35 14L35 12L37 10L37 8L38 7L40 7L41 8L41 10L42 11L54 11L55 12L54 13L48 13L47 14L47 18L46 19L43 16L43 14L42 13L38 13L32 19Z%22/><path fill=%22%23f6c9c1%22 fill-rule=%22evenodd%22 d=%22M9 28L10 27L11 28L11 52L10 53L9 52ZM11 18L14 15L15 16L12 19ZM15 26L16 25L18 25L24 19L30 19L31 20L30 21L24 21L18 27L16 27ZM27 36L28 35L34 35L35 36L34 37L28 37ZM33 18L34 17L36 19L42 19L44 17L46 19L47 18L47 14L48 13L49 14L49 18L53 22L53 48L52 49L51 48L51 22L50 21L34 21L33 20ZM41 30L42 29L43 30L43 40L42 41L41 40Z%22/><path fill=%22%23f0a699%22 fill-rule=%22evenodd%22 d=%22M9 54L10 53L12 53L13 54L12 55L10 55ZM19 30L20 29L21 30L21 46L20 47L19 46ZM23 24L24 23L46 23L47 24L46 25L24 25ZM25 14L26 13L30 13L32 11L33 12L30 15L26 15ZM25 32L26 31L27 32L27 34L26 35L25 34ZM25 40L26 39L27 40L27 42L28 43L32 43L33 44L32 45L28 45L25 42ZM41 50L42 49L44 49L45 50L44 51L42 51ZM41 54L42 53L46 53L47 54L46 55L42 55ZM49 14L50 13L52 13L53 14L52 15L50 15Z%22/><path fill=%22%23fae7e4%22 fill-rule=%22evenodd%22 d=%22M21 18L22 17L24 17L25 18L24 19L22 19ZM21 28L22 27L40 27L41 28L40 29L22 29ZM31 16L34 13L36 15L38 13L39 14L36 17L34 15L32 17Z%22/><path fill=%22%23e87965%22 fill-rule=%22evenodd%22 d=%22M19 22L20 21L23 24L22 25ZM29 16L34 11L35 12L30 17ZM39 46L42 43L43 44L40 47Z%22/><path fill=%22%23eb8b7a%22 fill-rule=%22evenodd%22 d=%22M11 26L12 25L14 25L15 26L14 27L12 27ZM17 20L20 17L21 18L18 21ZM35 32L36 31L37 32L37 34L36 35L35 34Z%22/></svg>',
+    'juejin': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%231e81ff%22 fill-rule=%22evenodd%22 d=%22M-1 32L4 27L6 29L8 29L16 37L18 37L24 43L26 43L30 47L32 47L36 43L38 43L44 37L46 37L54 29L56 29L58 27L63 32L62 33L60 33L54 39L52 39L44 47L42 47L34 55L28 55L20 47L18 47L10 39L8 39L2 33L0 33ZM11 22L16 17L18 19L20 19L28 27L34 27L42 19L44 19L46 17L49 20L49 22L40 31L38 31L32 37L30 37L24 31L22 31L14 23L12 23ZM25 10L28 7L34 7L37 10L37 12L32 17L30 17L25 12Z%22/></svg>',
+    'kuaishou': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23ff4805%22 fill-rule=%22evenodd%22 d=%22M-1 8L8 -1L54 -1L63 8L63 54L54 63L8 63L-1 54ZM9 34L12 31L16 31L18 33L20 33L22 35L27 30L26 29L20 29L13 22L13 12L20 5L30 5L32 7L34 7L36 9L38 9L40 7L44 7L46 9L48 9L53 14L53 24L47 30L48 31L50 31L53 34L53 50L48 55L28 55L26 53L24 53L22 51L20 51L18 53L10 53L9 52ZM15 40L16 39L18 41L20 41L21 42L18 45L16 45L15 44ZM21 14L24 11L28 11L31 14L31 20L28 23L24 23L21 20ZM29 38L30 37L46 37L47 38L47 46L44 49L30 49L29 48ZM31 28L32 27L36 27L37 28L36 29L32 29ZM39 16L40 15L44 15L47 18L47 20L44 23L42 23L39 20Z%22/><path fill=%22%23fffdfc%22 fill-rule=%22evenodd%22 d=%22M11 36L14 33L16 35L18 35L20 37L24 37L25 36L25 34L26 33L28 33L30 31L44 31L46 33L48 33L51 36L51 48L46 53L28 53L25 50L25 48L24 47L22 47L20 49L18 49L16 51L12 51L11 50ZM13 38L14 37L18 37L20 39L22 39L23 40L23 44L20 47L18 47L16 49L14 49L13 48ZM15 14L17 12L17 10L18 9L20 9L22 7L30 7L36 13L38 11L46 11L51 16L51 22L46 27L38 27L34 23L30 27L22 27L20 25L18 25L17 24L17 22L15 20ZM17 16L19 14L19 12L22 9L28 9L33 14L33 20L28 25L22 25L19 22L19 20L17 18ZM25 38L30 33L44 33L46 35L48 35L49 36L49 48L46 51L30 51L25 46ZM35 18L37 16L37 14L38 13L46 13L49 16L49 20L44 25L40 25L35 20Z%22/><path fill=%22%23ffb498%22 fill-rule=%22evenodd%22 d=%22M9 36L10 35L11 36L11 48L10 49L9 48ZM13 40L14 39L15 40L15 46L14 47L13 46ZM23 10L24 9L26 9L27 10L26 11L24 11ZM23 24L24 23L26 23L27 24L26 25L24 25ZM29 54L30 53L44 53L45 54L44 55L30 55ZM31 50L32 49L44 49L45 50L44 51L32 51ZM47 40L48 39L49 40L49 46L48 47L47 46ZM51 18L52 17L53 18L53 20L52 21L51 20ZM51 38L52 37L53 38L53 46L52 47L51 46Z%22/><path fill=%22%23ffeae3%22 fill-rule=%22evenodd%22 d=%22M13 48L14 47L16 47L19 50L18 51L16 49L14 49ZM17 16L18 15L19 16L19 18L18 19L17 18ZM17 38L20 35L21 36L18 39ZM19 8L20 7L23 10L20 13L19 12L21 10ZM19 22L20 21L23 24L20 27L19 26L21 24ZM19 46L20 45L22 47L24 47L25 46L25 38L23 36L24 35L27 38L27 46L24 49L22 49ZM27 32L28 31L30 33L44 33L46 31L47 32L44 35L30 35ZM35 12L36 11L39 14L38 15ZM35 18L36 17L37 18L37 20L36 21L35 20ZM39 10L40 9L44 9L45 10L44 11L40 11ZM45 14L48 11L51 14L48 17ZM45 50L48 47L51 50L48 53Z%22/><path fill=%22%23ff5e23%22 fill-rule=%22evenodd%22 d=%22M19 16L20 15L21 16L21 18L20 19L19 18ZM21 50L22 49L25 52L24 53ZM27 40L28 39L29 40L29 46L28 47L27 46ZM29 36L30 35L44 35L45 36L44 37L30 37ZM45 30L52 23L53 24L46 31ZM49 32L50 31L53 34L52 35Z%22/><path fill=%22%23ff7846%22 fill-rule=%22evenodd%22 d=%22M19 14L22 11L23 12L20 15ZM19 20L20 19L23 22L22 23ZM29 30L30 29L36 29L38 27L40 29L44 29L45 30L44 31L30 31Z%22/><path fill=%22%23ff9c77%22 fill-rule=%22evenodd%22 d=%22M13 16L14 15L15 16L15 18L14 19L13 18ZM37 16L40 13L41 14L38 17Z%22/><path fill=%22%23ffcab7%22 fill-rule=%22evenodd%22 d=%22M23 6L24 5L26 5L27 6L26 7L24 7ZM23 28L24 27L26 27L27 28L26 29L24 29ZM31 8L32 7L35 10L34 11ZM47 18L48 17L49 18L49 20L48 21L47 20ZM47 26L50 23L51 24L48 27Z%22/><path fill=%22%23ff8c61%22 fill-rule=%22evenodd%22 d=%22M15 10L18 7L19 8L16 11ZM15 24L16 23L19 26L18 27ZM23 34L26 31L27 32L24 35ZM31 16L32 15L33 16L33 18L32 19L31 18Z%22/></svg>',
+    'lol': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23886a36%22 fill-rule=%22evenodd%22 d=%22M-1 4L0 3L2 3L3 2L3 0L4 -1L18 -1L19 0L19 2L18 3L4 3L3 4L3 18L2 19L0 19L-1 18ZM-1 24L0 23L2 23L3 24L3 26L2 27L0 27L-1 26ZM-1 44L0 43L2 43L3 44L3 58L4 59L58 59L59 58L59 40L60 39L62 39L63 40L63 62L62 63L0 63L-1 62ZM15 8L16 7L18 7L19 8L19 10L18 11L16 11L15 10ZM23 0L24 -1L58 -1L59 0L59 2L60 3L62 3L63 4L63 18L62 19L60 19L59 18L59 4L58 3L24 3L23 2ZM23 8L24 7L26 7L27 8L27 10L26 11L24 11L23 10ZM31 52L32 51L46 51L47 52L47 54L46 55L32 55L31 54ZM47 40L48 39L54 39L55 40L55 42L54 43L48 43L47 42Z%22/><path fill=%22%23161836%22 fill-rule=%22evenodd%22 d=%22M3 4L4 3L10 3L11 4L11 10L10 11L4 11L3 10ZM3 24L4 23L6 23L7 24L7 38L6 39L4 39L3 38ZM3 44L4 43L6 43L7 44L7 50L8 51L10 51L11 50L11 48L12 47L14 47L15 48L15 50L14 51L12 51L11 52L11 54L10 55L8 55L7 56L7 58L6 59L4 59L3 58L3 56L4 55L6 55L7 54L7 52L6 51L4 51L3 50ZM19 56L20 55L22 55L23 56L23 58L22 59L20 59L19 58ZM27 36L28 35L30 35L31 36L31 38L30 39L28 39L27 38ZM31 4L32 3L58 3L59 4L59 6L58 7L32 7L31 6ZM39 40L40 39L46 39L47 38L47 36L48 35L50 35L51 36L51 38L50 39L48 39L47 40L47 42L46 43L40 43L39 42ZM55 12L56 11L58 11L59 12L59 34L58 35L56 35L55 34Z%22/><path fill=%22%23003896%22 fill-rule=%22evenodd%22 d=%22M7 12L8 11L10 11L11 12L11 14L12 15L14 15L15 16L15 26L14 27L12 27L11 28L11 30L12 31L14 31L15 32L15 46L14 47L12 47L11 48L11 50L10 51L8 51L7 50L7 48L8 47L10 47L11 46L11 44L10 43L8 43L7 42L7 24L8 23L10 23L11 22L11 16L10 15L8 15L7 14ZM27 16L28 15L30 15L31 16L31 22L30 23L28 23L27 22ZM31 36L32 35L34 35L35 36L35 38L34 39L32 39L31 38ZM31 56L32 55L34 55L35 56L35 58L34 59L32 59L31 58ZM35 8L36 7L42 7L43 8L43 10L44 11L54 11L55 12L55 26L54 27L52 27L51 26L51 20L50 19L48 19L47 18L47 16L46 15L40 15L39 14L39 12L38 11L36 11L35 10ZM39 56L40 55L46 55L47 56L47 58L46 59L40 59L39 58ZM43 36L44 35L46 35L47 34L47 32L48 31L50 31L51 32L51 34L50 35L48 35L47 36L47 38L46 39L44 39L43 38ZM51 56L52 55L54 55L55 56L55 58L54 59L52 59L51 58ZM55 44L56 43L58 43L59 44L59 46L58 47L56 47L55 46Z%22/><path fill=%22%230666c8%22 fill-rule=%22evenodd%22 d=%22M7 44L8 43L10 43L11 44L11 46L10 47L8 47L7 46ZM31 12L32 11L38 11L39 12L39 14L40 15L46 15L47 16L47 18L48 19L50 19L51 20L51 26L52 27L54 27L55 28L55 30L54 31L48 31L47 32L47 34L46 35L44 35L43 36L43 38L42 39L36 39L35 38L35 36L34 35L32 35L31 34ZM51 52L52 51L54 51L55 52L55 54L54 55L52 55L51 54Z%22/><path fill=%22%237a5925%22 fill-rule=%22evenodd%22 d=%22M-1 0L0 -1L2 -1L3 0L3 2L2 3L0 3L-1 2ZM-1 20L0 19L2 19L3 20L3 22L2 23L0 23L-1 22ZM-1 28L0 27L2 27L3 28L3 42L2 43L0 43L-1 42ZM11 8L12 7L14 7L15 8L15 10L16 11L18 11L19 10L19 8L20 7L22 7L23 8L23 10L22 11L20 11L19 12L19 50L20 51L30 51L31 52L31 54L30 55L16 55L15 54L15 12L14 11L12 11L11 10ZM19 0L20 -1L22 -1L23 0L23 2L22 3L20 3L19 2ZM27 44L28 43L42 43L43 44L43 46L42 47L28 47L27 46ZM47 52L48 51L50 51L51 52L51 54L50 55L48 55L47 54ZM51 36L52 35L54 35L55 36L55 38L54 39L52 39L51 38ZM59 0L60 -1L62 -1L63 0L63 2L62 3L60 3L59 2ZM59 20L60 19L62 19L63 20L63 38L62 39L60 39L59 38Z%22/><path fill=%22%23d5aa43%22 fill-rule=%22evenodd%22 d=%22M19 12L20 11L26 11L27 12L27 46L28 47L42 47L43 46L43 44L44 43L50 43L51 44L51 50L50 51L20 51L19 50Z%22/><path fill=%22%23122977%22 fill-rule=%22evenodd%22 d=%22M7 16L8 15L10 15L11 14L11 12L12 11L14 11L15 12L15 14L14 15L12 15L11 16L11 22L10 23L8 23L7 22ZM7 56L8 55L18 55L19 56L19 58L18 59L8 59L7 58ZM11 28L12 27L14 27L15 28L15 30L14 31L12 31L11 30ZM23 56L24 55L30 55L31 56L31 58L30 59L24 59L23 58ZM27 12L28 11L30 11L31 10L31 8L32 7L34 7L35 8L35 10L34 11L32 11L31 12L31 14L30 15L28 15L27 14ZM27 24L28 23L30 23L31 24L31 34L30 35L28 35L27 34ZM35 56L36 55L38 55L39 56L39 58L38 59L36 59L35 58ZM43 8L44 7L54 7L55 8L55 10L54 11L44 11L43 10ZM47 56L48 55L50 55L51 56L51 58L50 59L48 59L47 58ZM51 32L52 31L54 31L55 32L55 34L56 35L58 35L59 36L59 42L58 43L56 43L55 44L55 46L56 47L58 47L59 48L59 58L58 59L56 59L55 58L55 52L54 51L52 51L51 50L51 44L52 43L54 43L55 42L55 36L54 35L52 35L51 34Z%22/><path fill=%22%2318121b%22 fill-rule=%22evenodd%22 d=%22M3 12L4 11L6 11L7 12L7 22L6 23L4 23L3 22ZM3 40L4 39L6 39L7 40L7 42L6 43L4 43L3 42ZM3 52L4 51L6 51L7 52L7 54L6 55L4 55L3 54ZM11 4L12 3L30 3L31 4L31 10L30 11L28 11L27 10L27 8L26 7L12 7L11 6ZM11 52L12 51L14 51L15 52L15 54L14 55L12 55L11 54ZM27 40L28 39L38 39L39 40L39 42L38 43L28 43L27 42ZM55 8L56 7L58 7L59 8L59 10L58 11L56 11L55 10Z%22/></svg>',
+    'netease-music': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23dd001b%22 fill-rule=%22evenodd%22 d=%22M-1 24L1 22L1 18L3 16L3 14L14 3L16 3L18 1L22 1L24 -1L38 -1L40 1L44 1L46 3L48 3L59 14L59 16L61 18L61 22L63 24L63 38L61 40L61 44L59 46L59 48L48 59L46 59L44 61L40 61L38 63L24 63L22 61L18 61L16 59L14 59L3 48L3 46L1 44L1 40L-1 38ZM11 28L13 26L13 22L22 13L26 13L29 16L24 21L22 21L19 24L19 28L17 30L17 34L19 36L19 38L26 45L38 45L43 40L43 38L45 36L45 32L43 30L43 28L42 27L41 28L41 34L39 36L39 38L38 39L36 39L34 41L28 41L23 36L23 26L31 18L31 14L36 9L40 9L42 11L44 11L45 12L45 16L44 17L40 17L38 15L37 16L37 18L38 19L42 19L49 26L49 28L51 30L51 38L49 40L49 42L42 49L40 49L38 51L24 51L22 49L20 49L15 44L15 42L13 40L13 38L11 36ZM29 28L32 25L35 28L35 32L32 35L30 35L29 34Z%22/><path fill=%22%23fefdfd%22 fill-rule=%22evenodd%22 d=%22M13 28L15 26L15 24L17 22L17 20L20 17L22 17L24 15L26 15L27 16L26 17L24 17L17 24L17 28L15 30L15 34L17 36L17 38L19 40L19 42L22 45L24 45L26 47L38 47L45 40L45 38L47 36L47 34L45 32L45 28L40 23L38 23L37 24L37 26L39 28L39 34L34 39L28 39L25 36L25 26L30 21L32 21L33 20L33 14L36 11L40 11L43 14L42 15L40 15L38 13L35 16L35 18L38 21L40 21L42 23L44 23L47 26L47 28L49 30L49 38L47 40L47 42L42 47L40 47L38 49L34 49L32 51L30 49L24 49L15 40L15 38L13 36ZM27 28L32 23L34 23L35 24L35 28L37 30L37 34L34 37L30 37L27 34Z%22/><path fill=%22%23fbe8ea%22 fill-rule=%22evenodd%22 d=%22M15 22L16 21L19 24L18 25ZM15 30L16 29L17 30L17 34L16 35L15 34ZM15 42L16 41L18 43L20 41L23 44L20 47ZM21 16L22 15L25 18L24 19ZM23 30L24 29L25 30L25 32L24 33L23 32ZM27 50L28 49L30 49L31 50L30 51L28 51ZM33 36L36 33L39 36L36 39ZM37 24L38 23L40 23L42 21L43 22L38 27L37 26ZM37 46L38 45L41 48L40 49ZM45 34L46 33L47 34L47 36L46 37L45 36Z%22/><path fill=%22%23ea6878%22 fill-rule=%22evenodd%22 d=%22M15 20L20 15L21 16L16 21ZM23 14L24 13L26 13L27 14L26 15L24 15ZM29 40L30 39L32 39L33 40L32 41L30 41ZM31 16L32 15L33 16L33 18L32 19L31 18ZM39 30L40 29L41 30L41 32L40 33L39 32ZM41 16L44 13L45 14L42 17ZM43 22L44 21L47 24L46 25Z%22/><path fill=%22%23e6485b%22 fill-rule=%22evenodd%22 d=%22M49 32L50 31L51 32L51 36L50 37L49 36Z%22/><path fill=%22%23e3344a%22 fill-rule=%22evenodd%22 d=%22M15 44L16 43L19 46L18 47ZM27 30L28 29L29 30L29 32L28 33L27 32Z%22/><path fill=%22%23f4acb5%22 fill-rule=%22evenodd%22 d=%22M19 22L22 19L23 20L20 23ZM25 24L28 21L29 22L26 25ZM31 24L32 23L34 23L35 24L34 25L32 25ZM35 30L36 29L37 30L37 32L36 33L35 32ZM43 46L46 43L47 44L44 47Z%22/></svg>',
+    'netease-news': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23ff0000%22 fill-rule=%22evenodd%22 d=%22M7 36L8 35L18 35L19 34L19 32L18 31L16 31L15 30L15 28L14 27L12 27L11 26L11 12L12 11L14 11L15 10L15 8L16 7L18 7L19 6L19 4L20 3L42 3L43 4L43 6L44 7L46 7L47 8L47 10L48 11L50 11L51 12L51 26L50 27L48 27L47 28L47 30L48 31L50 31L51 32L51 34L52 35L54 35L55 36L55 50L54 51L52 51L51 52L51 54L50 55L48 55L47 56L47 58L46 59L36 59L35 58L35 56L34 55L32 55L31 54L31 52L30 51L28 51L27 52L27 54L26 55L24 55L23 56L23 58L22 59L12 59L11 58L11 56L12 55L18 55L19 54L19 52L20 51L26 51L27 50L27 48L28 47L30 47L31 46L31 44L32 43L38 43L39 42L39 40L40 39L42 39L43 38L43 36L42 35L36 35L35 36L35 38L34 39L28 39L27 40L27 42L26 43L24 43L23 44L23 46L22 47L16 47L15 48L15 50L14 51L8 51L7 50L7 48L8 47L10 47L11 46L11 44L12 43L22 43L23 42L23 40L24 39L26 39L27 38L27 36L26 35L20 35L19 36L19 38L18 39L8 39L7 38ZM23 12L24 11L26 11L27 12L27 14L28 15L34 15L35 14L35 12L36 11L38 11L39 12L39 18L38 19L28 19L27 20L27 22L26 23L24 23L23 22ZM27 8L28 7L34 7L35 8L35 10L34 11L28 11L27 10ZM27 24L28 23L38 23L39 24L39 26L38 27L28 27L27 26ZM27 32L28 31L30 31L31 32L31 34L30 35L28 35L27 34ZM35 48L36 47L38 47L39 46L39 44L40 43L42 43L43 42L43 40L44 39L50 39L51 40L51 46L50 47L48 47L47 48L47 50L46 51L44 51L43 52L43 54L42 55L36 55L35 54Z%22/></svg>',
+    'ngabbs': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23315f81%22 fill-rule=%22evenodd%22 d=%22M-1 8L0 7L2 7L3 6L3 4L4 3L6 3L7 2L7 0L8 -1L26 -1L28 0L28 2L20 3L19 4L19 10L20 12L26 11L27 10L27 8L28 6L31 6L30 0L32 -1L54 -1L55 0L55 2L56 3L58 3L59 4L59 6L60 7L62 7L63 8L63 54L62 55L60 55L59 56L59 58L58 59L56 59L55 60L55 62L54 63L36 63L35 62L35 60L36 59L38 59L39 58L39 48L38 47L36 47L35 46L35 44L34 43L24 43L23 44L23 54L24 58L26 58L27 60L27 62L26 63L8 63L7 62L7 60L6 59L4 59L3 58L3 56L2 55L0 55L-1 54ZM7 24L8 23L11 22L11 20L12 19L14 19L15 18L15 16L16 15L22 14L26 15L27 16L27 18L28 19L34 19L35 20L35 22L38 22L39 24L39 26L40 27L42 27L43 28L43 30L44 31L46 31L47 32L48 36L50 36L50 38L48 38L47 42L46 43L40 43L39 42L39 40L36 39L35 38L35 36L34 35L32 35L31 34L31 32L30 31L28 31L27 30L27 28L26 27L24 27L20 27L19 28L19 38L18 39L12 39L11 38L11 36L10 35L8 35L7 34ZM27 12L28 11L30 11L32 6L34 6L34 4L36 3L38 3L39 4L39 10L38 12L36 12L36 14L34 15L28 15L27 14ZM35 16L36 14L38 14L38 12L40 11L42 11L43 10L43 8L44 7L46 7L47 8L47 14L48 15L50 15L52 16L51 22L52 23L54 23L55 24L55 30L54 31L48 31L47 30L46 27L44 27L44 24L42 22L39 22L39 20L36 20L35 18Z%22/><path fill=%22%23fdfefe%22 fill-rule=%22evenodd%22 d=%22M11 24L12 23L14 23L15 22L15 20L16 19L26 19L27 20L27 22L28 23L34 23L35 24L35 26L36 27L38 27L39 28L39 30L40 31L42 31L43 32L43 34L44 35L46 35L47 36L47 38L46 40L42 40L42 42L40 42L40 40L38 38L38 36L36 36L35 34L35 32L34 31L32 31L31 30L31 28L30 27L28 27L26 26L26 24L22 23L20 23L19 24L19 34L18 35L12 35L11 34ZM20 8L26 8L26 10L20 10ZM28 44L30 44L30 46L32 47L34 47L35 48L35 58L34 59L28 59L27 58L27 48L28 46ZM32 12L32 11L34 11L34 14L32 14ZM40 16L40 15L42 15L42 18L40 18Z%22/><path fill=%22%23a7bbc9%22 fill-rule=%22evenodd%22 d=%22M7 24L12 22L12 20L14 20L15 18L15 16L16 15L22 15L23 16L23 18L22 19L16 19L14 20L14 22L12 22L11 24L10 31L8 31L8 30ZM11 36L12 35L18 36L18 38L12 39L11 38ZM19 24L20 23L24 24L24 26L20 27L19 26ZM23 4L24 3L26 3L27 4L26 7L24 7L23 6ZM23 48L24 47L26 47L27 48L27 54L26 55L23 54ZM27 20L28 19L30 19L31 20L31 22L28 23L27 22ZM27 28L28 27L30 27L31 28L31 30L32 31L34 31L35 32L35 34L34 35L32 35L31 34L31 32L30 31L28 31L27 30ZM28 60L34 59L35 58L36 50L38 50L39 58L38 59L36 59L35 60L35 62L34 63L28 62ZM32 8L34 8L35 6L35 4L36 3L38 3L39 4L39 10L40 12L42 12L44 10L44 8L46 8L47 14L48 16L50 16L51 22L52 23L54 23L55 24L55 30L54 31L48 31L47 32L47 34L46 35L44 35L43 34L43 32L42 31L40 31L39 30L39 28L38 27L36 27L35 26L35 24L36 23L38 23L39 24L39 26L40 27L42 27L43 28L43 30L44 31L46 31L47 30L47 28L48 27L50 27L51 26L51 24L50 23L44 22L44 20L46 20L48 18L48 16L46 15L40 14L39 16L39 18L38 19L36 19L35 18L35 16L40 14L40 12L38 11L32 10Z%22/><path fill=%22%23c7d4dc%22 fill-rule=%22evenodd%22 d=%22M7 28L8 26L10 26L11 28L11 30L10 31L8 31L7 30ZM11 20L12 19L14 19L15 20L15 22L14 23L12 23L11 22ZM11 36L12 35L18 35L19 36L19 38L18 39L12 39ZM19 8L20 7L22 7L23 6L23 4L24 3L26 3L27 4L27 10L26 11L20 11L19 10ZM19 16L22 15L23 16L23 18L22 19L20 19L19 18ZM19 24L20 23L26 23L27 22L27 20L28 19L30 19L31 20L31 22L30 23L28 23L27 24L28 28L30 28L30 30L32 32L34 32L34 34L38 35L39 36L39 38L40 39L46 39L47 40L47 42L46 43L40 43L39 42L39 40L35 38L35 36L34 34L32 34L32 32L30 30L28 30L28 28L26 27L20 27L19 26ZM24 48L26 48L27 46L27 44L28 43L30 43L31 44L31 46L30 47L28 47L26 48L26 50L24 50ZM31 8L32 7L34 7L36 6L36 4L38 4L38 10L43 12L42 18L44 19L46 19L47 18L47 16L48 15L50 15L51 16L50 22L52 23L55 24L55 30L54 31L48 30L46 32L46 35L44 35L43 34L43 32L42 31L40 31L39 30L39 28L40 27L42 27L43 28L43 30L44 32L46 32L48 30L48 28L50 28L51 26L51 24L50 22L44 23L43 22L43 20L42 18L39 18L39 12L38 10L36 10L34 12L34 14L32 14ZM31 60L32 59L34 59L35 60L35 62L34 63L32 63L31 62ZM35 52L36 51L38 51L39 52L39 54L38 55L36 55L35 54Z%22/><path fill=%22%23577d98%22 fill-rule=%22evenodd%22 d=%22M3 16L4 15L6 15L7 14L7 12L8 11L10 11L10 14L12 16L14 16L14 18L12 18L11 20L11 22L10 23L8 23L7 22L6 18L3 18ZM2 28L4 27L6 27L6 30L8 31L11 32L11 38L12 40L18 40L20 38L20 28L20 28L24 28L24 38L22 40L20 40L20 42L18 43L12 43L11 42L11 40L8 40L7 38L7 32L6 31L2 30ZM6 16L8 14L10 14L12 16L12 18L10 19L6 18ZM18 4L20 3L22 3L23 2L23 0L24 -1L30 -1L32 0L32 2L35 2L35 0L36 0L42 0L44 0L43 10L40 11L38 15L36 15L35 14L35 12L39 10L40 4L38 2L36 2L34 7L30 8L28 8L27 6L27 4L26 3L24 3L23 4L22 7L18 6ZM18 12L20 11L26 12L30 11L30 18L32 19L42 19L43 18L43 16L44 15L48 14L47 8L48 3L50 3L51 4L51 10L52 11L54 11L55 12L56 18L54 19L52 19L50 14L48 14L47 16L47 18L46 19L44 19L43 20L43 22L44 23L50 23L51 24L51 26L50 27L44 27L42 26L40 26L40 24L38 23L32 22L32 20L30 18L24 19L23 18L23 16L22 15L18 14ZM23 44L24 42L26 42L26 40L31 38L31 36L32 36L34 36L34 38L36 39L38 39L39 40L39 42L40 43L46 43L47 42L47 36L48 35L50 35L52 36L52 42L50 44L48 44L48 46L46 48L40 47L38 46L38 44L36 44L35 42L34 38L32 38L31 40L31 42L28 42L27 44L27 46L26 47L23 46ZM22 56L24 55L26 55L27 56L27 58L26 60L24 60L22 58ZM36 60L40 60L40 62L36 62Z%22/><path fill=%22%238aa4b7%22 fill-rule=%22evenodd%22 d=%22M7 24L8 23L10 23L11 24L11 26L10 27L8 27L7 26ZM15 16L16 15L18 15L20 16L20 18L18 19L16 19L15 18ZM20 4L23 4L23 6L20 6ZM23 16L26 16L27 14L27 12L28 11L30 11L31 12L31 14L30 15L28 15L26 16L26 18L23 18ZM24 44L26 44L27 54L26 55L24 55L23 54ZM28 28L30 28L30 30L32 32L34 32L34 34L32 34L32 32L30 30L28 30ZM27 60L28 59L30 59L32 60L32 62L30 63L28 63L27 62ZM31 20L34 20L35 18L35 16L36 15L38 15L39 16L39 18L38 19L36 19L35 20L35 22L36 23L38 23L39 24L39 26L38 27L36 27L35 26L35 24L34 22L31 22ZM31 44L32 43L34 43L35 44L35 46L36 47L38 47L39 48L39 50L38 51L36 51L35 50L35 48L34 47L32 47L31 46ZM36 4L38 4L38 10L36 10ZM35 56L36 55L38 55L39 56L39 58L38 59L36 59L35 58ZM43 8L44 7L46 7L47 8L47 14L46 16L44 16L43 14ZM44 32L46 32L48 30L48 28L51 28L51 30L48 30L46 32L46 34L44 34ZM47 20L48 19L50 19L50 20L50 23L48 23L47 22Z%22/><path fill=%22%236a8ba3%22 fill-rule=%22evenodd%22 d=%22M7 32L8 31L10 31L11 32L11 34L10 36L8 36L7 34ZM19 4L20 3L22 3L24 2L24 0L30 -1L31 0L31 2L32 4L34 4L34 6L28 7L26 2L24 2L23 4L23 6L22 7L20 7L19 6ZM19 12L22 12L23 12L23 14L26 15L27 14L27 12L28 11L30 11L31 12L31 14L30 15L28 15L27 18L26 19L24 19L23 18L23 16L22 14L19 14ZM23 44L24 43L26 43L27 44L27 46L26 47L24 47L23 46ZM23 56L24 54L26 54L27 58L28 60L30 60L30 62L28 62L28 60L26 59L24 59L23 58ZM31 20L32 19L42 19L43 18L44 14L46 14L47 18L46 19L44 19L43 20L43 22L44 23L50 23L51 24L51 26L50 27L44 27L43 26L43 24L42 23L36 24L32 23L31 22ZM32 44L34 44L36 42L36 40L38 40L38 42L36 42L35 44L35 46L36 47L38 47L39 48L39 50L36 51L35 48L34 46L32 46ZM36 12L36 11L38 11L38 12L38 15L36 15ZM42 8L44 8L47 8L46 12L44 12L42 10ZM47 36L48 35L50 35L51 36L51 38L50 40L48 40ZM52 16L52 15L54 15L55 18L52 18Z%22/><path fill=%22%23e3e9ee%22 fill-rule=%22evenodd%22 d=%22M8 28L10 28L12 26L12 20L22 19L28 20L28 22L34 23L35 26L36 28L39 28L39 30L40 31L42 31L43 34L44 35L46 35L47 42L46 43L40 43L38 39L36 39L35 38L35 32L34 31L32 31L31 28L30 27L24 27L23 26L23 24L22 23L20 23L19 24L18 38L15 38L15 36L14 35L12 35L12 32L10 30L8 30ZM19 8L20 7L26 6L27 10L26 11L20 11L19 10ZM27 44L28 43L30 43L32 48L34 48L34 50L36 52L38 52L38 54L36 54L34 56L34 59L28 59L27 58ZM31 8L32 7L35 8L35 14L34 15L32 15L31 14ZM40 12L40 12L42 12L43 18L44 20L46 20L47 18L48 15L50 15L51 18L50 19L48 19L46 20L46 22L44 22L44 20L42 19L40 19L39 18Z%22/></svg>',
+    'nodeseek': 'data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2032%2032%22%3E%3Cg%20fill=%22none%22%20stroke=%22%23c8c8c8%22%20stroke-width=%222.6%22%20stroke-linecap=%22round%22%3E%3Cpath%20d=%22M3.3%208.7A14.7%2014.7%200%200%200%203.3%2023.3%22/%3E%3Cpath%20d=%22M6%2010.2A11.6%2011.6%200%200%200%206%2021.8%22/%3E%3Cpath%20d=%22M8.5%2011.7A8.6%208.6%200%200%200%208.5%2020.3%22/%3E%3Cpath%20d=%22M28.7%208.7A14.7%2014.7%200%200%201%2028.7%2023.3%22/%3E%3Cpath%20d=%22M26%2010.2A11.6%2011.6%200%200%201%2026%2021.8%22/%3E%3Cpath%20d=%22M23.5%2011.7A8.6%208.6%200%200%201%2023.5%2020.3%22/%3E%3C/g%3E%3Ccircle%20cx=%2216%22%20cy=%2216%22%20r=%226.7%22%20fill=%22%23141414%22/%3E%3Cellipse%20cx=%2213%22%20cy=%2214.5%22%20rx=%220.85%22%20ry=%221.7%22%20fill=%22%23fff%22/%3E%3Cellipse%20cx=%2219%22%20cy=%2214.5%22%20rx=%220.85%22%20ry=%221.7%22%20fill=%22%23fff%22/%3E%3C/svg%3E',
+    'qq-music': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23fedb01%22 fill-rule=%22evenodd%22 d=%22M1 22L3 20L3 18L5 16L5 14L14 5L16 5L18 3L20 3L22 1L40 1L41 2L40 3L38 3L36 5L26 5L24 7L20 7L19 8L19 12L21 14L21 16L25 20L25 22L27 24L27 26L29 28L29 30L33 34L32 35L26 35L24 37L22 37L17 42L17 46L15 48L17 50L17 54L22 59L24 59L26 61L34 61L36 59L40 59L45 54L45 52L47 50L47 44L45 42L45 40L41 36L41 34L39 32L39 30L35 26L35 24L33 22L33 20L36 17L38 17L45 10L45 8L48 5L57 14L57 16L59 18L59 20L61 22L61 40L59 42L59 46L46 59L44 59L42 61L38 61L36 63L26 63L24 61L20 61L18 59L16 59L12 55L10 55L7 52L7 50L3 46L3 44L1 42Z%22/><path fill=%22%2307bd71%22 fill-rule=%22evenodd%22 d=%22M19 46L20 45L22 47L42 47L43 48L43 52L38 57L34 57L32 59L28 59L26 57L24 57L19 52Z%22/><path fill=%22%2325c079%22 fill-rule=%22evenodd%22 d=%22M19 44L26 37L34 37L35 36L35 34L33 32L34 31L36 31L37 32L37 34L41 38L41 40L43 42L43 44L45 46L45 48L44 49L42 47L22 47ZM31 28L32 27L34 27L35 28L34 29L32 29Z%22/><path fill=%22%2314c7a9%22 fill-rule=%22evenodd%22 d=%22M21 10L22 9L28 9L30 7L38 7L40 5L42 5L46 1L47 2L45 4L45 6L36 15L34 15L32 17L30 17L28 19L23 14L23 12Z%22/><path fill=%22%23e7d915%22 fill-rule=%22evenodd%22 d=%22M17 54L18 53L23 58L22 59ZM25 6L26 5L28 5L29 6L28 7L26 7ZM25 60L26 59L28 59L29 60L28 61L26 61ZM37 16L44 9L45 10L38 17ZM39 58L44 53L45 54L40 59Z%22/><path fill=%22%2327c595%22 fill-rule=%22evenodd%22 d=%22M21 8L22 7L28 7L29 8L28 9L22 9ZM25 18L26 17L28 19L30 17L31 18L31 22L33 24L33 26L32 27L27 22L27 20Z%22/><path fill=%22%2349c458%22 fill-rule=%22evenodd%22 d=%22M17 46L18 45L19 46L19 50L18 51L17 50ZM19 42L24 37L25 38L20 43ZM19 54L20 53L23 56L22 57ZM29 36L30 35L32 35L34 33L35 34L35 36L34 37L30 37ZM35 16L38 13L39 14L36 17ZM37 34L38 33L41 36L40 37ZM39 56L43 52L43 50L44 49L45 50L45 52L40 57ZM41 10L44 7L45 8L42 11Z%22/><path fill=%22%23c8d529%22 fill-rule=%22evenodd%22 d=%22M19 40L22 37L23 38L20 41ZM25 36L26 35L28 35L29 36L28 37L26 37ZM29 6L30 5L34 5L35 6L34 7L30 7ZM29 60L30 59L32 59L33 60L32 61L30 61ZM31 20L34 17L35 18L32 21ZM37 32L38 31L41 34L40 35ZM45 46L46 45L47 46L47 48L46 49L45 48Z%22/></svg>',
+    'qq-news': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23fefefe%22 fill-rule=%22evenodd%22 d=%22M1 44L2 43L6 43L9 40L9 20L11 18L11 16L13 14L13 12L22 3L24 3L26 1L28 1L30 -1L34 -1L35 0L33 2L33 6L36 9L40 9L42 11L44 11L55 22L55 24L57 26L57 30L59 32L59 46L57 48L57 50L56 51L55 50L55 48L52 45L50 45L46 49L44 49L42 51L40 51L38 53L36 53L34 55L18 55L16 53L12 53L8 49L6 49ZM17 34L19 32L19 28L21 26L21 20L23 18L23 16L24 15L26 15L28 13L34 13L36 15L38 15L39 16L39 18L41 20L41 26L43 28L43 32L45 34L45 40L44 41L42 39L39 42L41 44L41 46L40 47L22 47L21 46L21 44L23 42L20 39L18 41L17 40Z%22/><path fill=%22%230152d4%22 fill-rule=%22evenodd%22 d=%22M19 34L21 32L21 28L23 26L23 20L28 15L34 15L39 20L39 26L41 28L41 32L43 34L43 36L42 37L40 37L39 38L39 40L37 42L39 44L38 45L24 45L23 44L25 42L23 40L23 38L22 37L20 37L19 36Z%22/><path fill=%22%23ff0156%22 fill-rule=%22evenodd%22 d=%22M5 50L6 49L10 53L12 53L14 55L20 55L22 57L30 57L32 55L38 55L40 53L42 53L48 47L52 47L55 50L55 52L50 57L48 57L44 61L40 61L38 63L24 63L22 61L18 61L14 57L12 57Z%22/><path fill=%22%232ad6a9%22 fill-rule=%22evenodd%22 d=%22M35 2L38 -1L40 1L44 1L46 3L48 3L59 14L59 16L61 18L61 22L63 24L63 38L62 39L61 38L61 34L59 32L59 28L57 26L57 24L55 22L55 20L46 11L44 11L42 9L40 9L38 7L36 7L35 6Z%22/><path fill=%22%23ffd219%22 fill-rule=%22evenodd%22 d=%22M-1 24L1 22L1 18L3 16L3 14L14 3L16 3L18 1L22 1L24 -1L25 0L22 3L20 3L13 10L13 12L9 16L9 20L7 22L7 40L6 41L2 41L-1 38Z%22/><path fill=%22%23d8e4f8%22 fill-rule=%22evenodd%22 d=%22M21 46L22 45L40 45L41 46L40 47L22 47ZM33 2L36 -1L37 0L34 3ZM33 6L34 5L37 8L36 9ZM49 16L50 15L53 18L52 19Z%22/><path fill=%22%23296dda%22 fill-rule=%22evenodd%22 d=%22M21 24L22 23L23 24L23 26L22 27L21 26ZM23 18L26 15L27 16L24 19ZM35 16L36 15L39 18L38 19ZM39 24L40 23L41 24L41 26L40 27L39 26Z%22/><path fill=%22%236899e5%22 fill-rule=%22evenodd%22 d=%22M17 36L18 35L23 40L22 41L20 39L18 39L17 38ZM29 14L30 13L32 13L33 14L32 15L30 15ZM39 40L44 35L45 36L45 38L44 39L42 39L40 41Z%22/><path fill=%22%2374e5c7%22 fill-rule=%22evenodd%22 d=%22M45 12L46 11L49 14L48 15ZM59 34L60 33L61 34L61 44L60 45L59 44Z%22/><path fill=%22%23ffe67a%22 fill-rule=%22evenodd%22 d=%22M13 10L20 3L21 4L14 11Z%22/><path fill=%22%23fff3c4%22 fill-rule=%22evenodd%22 d=%22M5 42L8 39L9 40L6 43ZM7 24L8 23L9 24L9 36L8 37L7 36Z%22/><path fill=%22%23ffc5d8%22 fill-rule=%22evenodd%22 d=%22M7 50L8 49L11 52L10 53ZM13 54L14 53L16 53L17 54L16 55L14 55ZM21 56L22 55L30 55L31 56L30 57L22 57ZM35 54L36 53L38 53L40 51L42 51L44 49L45 50L42 53L40 53L38 55L36 55ZM49 46L50 45L52 45L55 48L54 49L52 47L50 47Z%22/></svg>',
+    'sina': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23fefefe%22 fill-rule=%22evenodd%22 d=%22M9 36L16 29L20 29L22 27L34 27L36 29L40 29L47 36L47 42L42 47L40 47L38 49L34 49L32 51L26 51L25 50L26 49L32 49L34 47L36 47L39 44L39 42L41 40L41 38L39 36L39 34L36 31L32 31L30 29L22 29L20 31L18 31L13 36L13 44L15 46L14 47L11 44L11 42L9 40ZM17 42L22 37L27 42L22 47Z%22/><path fill=%22%23d61c16%22 fill-rule=%22evenodd%22 d=%22M17 52L18 51L38 51L40 49L42 49L49 42L49 36L47 34L47 32L45 30L46 29L48 29L50 27L56 27L57 28L57 30L59 32L59 40L57 42L57 44L52 49L50 49L48 51L46 51L44 53L40 53L38 55L24 55L22 53L18 53Z%22/><path fill=%22%23fd9995%22 fill-rule=%22evenodd%22 d=%22M7 24L8 23L10 23L11 22L11 20L12 19L15 22L14 23L12 23L8 27L7 26ZM17 20L18 19L20 19L21 18L19 16L20 15L22 17L30 17L32 15L34 17L36 15L40 15L45 20L44 21L42 19L40 21L22 21L20 23L18 23L17 22ZM43 46L46 43L47 44L44 47ZM47 20L48 19L50 19L51 18L49 16L50 15L52 17L54 15L55 16L55 18L54 19L52 19L50 21L48 21Z%22/><path fill=%22%23fe5954%22 fill-rule=%22evenodd%22 d=%22M3 34L4 33L6 33L7 34L7 42L6 43L5 42L5 38L3 36ZM5 24L7 22L7 20L8 19L9 20L9 22L7 24L7 26L6 27L5 26ZM7 30L10 27L12 27L14 25L18 25L19 26L18 27L14 27L12 29L10 29L8 31ZM9 16L12 13L13 14L10 17ZM9 44L10 43L13 46L12 47ZM15 20L17 18L17 16L20 13L21 14L19 16L19 18L16 21ZM21 10L24 7L25 8L22 11ZM21 24L22 23L28 23L30 25L32 25L33 26L32 27L30 27L28 25L26 27L24 25L22 25ZM47 24L48 23L54 23L57 26L56 27L54 25L48 25Z%22/><path fill=%22%23484646%22 fill-rule=%22evenodd%22 d=%22M13 38L14 37L17 40L17 42L16 43L13 40ZM27 40L28 39L38 39L39 40L39 42L38 43L28 43L27 42Z%22/><path fill=%22%23fe7a76%22 fill-rule=%22evenodd%22 d=%22M5 28L6 27L8 27L12 23L20 23L22 21L40 21L42 19L44 21L46 19L48 21L50 21L52 19L54 19L55 20L55 22L57 24L56 25L54 23L22 23L20 25L14 25L12 27L10 27L8 29L6 29ZM47 38L48 37L49 38L49 40L48 41L47 40Z%22/><path fill=%22%23ffcac8%22 fill-rule=%22evenodd%22 d=%22M9 20L12 17L13 18L11 20L11 22L10 23L9 22ZM19 18L25 12L23 10L24 9L26 9L27 10L27 16L26 17L22 17L20 19ZM33 16L39 10L39 6L40 5L41 6L41 14L43 16L42 17L40 15L36 15L34 17ZM49 18L52 15L53 16L50 19Z%22/><path fill=%22%23fb322c%22 fill-rule=%22evenodd%22 d=%22M3 28L4 27L5 28L5 32L4 33L3 32ZM3 38L4 37L5 38L5 42L6 43L7 42L7 32L10 29L12 29L14 27L16 27L17 28L16 29L14 29L9 34L9 44L12 47L14 47L16 49L18 49L19 50L18 51L16 51L14 49L10 49L3 42ZM19 26L20 25L24 25L25 26L24 27L20 27ZM29 24L30 23L46 23L48 25L54 25L55 26L54 27L50 27L48 29L46 29L45 30L47 32L46 33L42 29L40 29L38 27L34 27L32 25L30 25ZM47 16L48 15L49 16L49 18L48 19L47 18Z%22/><path fill=%22%23282626%22 fill-rule=%22evenodd%22 d=%22M15 36L20 31L32 31L34 33L36 33L37 34L37 36L39 38L38 39L32 39L31 38L31 36L30 35L28 35L26 37L18 37L16 39L15 38Z%22/><path fill=%22%23ffe5e4%22 fill-rule=%22evenodd%22 d=%22M21 14L24 11L25 12L22 15ZM33 14L35 12L35 10L37 8L37 6L38 5L39 6L39 10L34 15Z%22/><path fill=%22%23d9d9d9%22 fill-rule=%22evenodd%22 d=%22M15 46L18 43L22 47L26 43L27 44L22 49L20 49L19 48L19 46L18 45L16 47ZM17 40L20 37L21 38L18 41ZM21 30L22 29L26 29L27 30L26 31L22 31ZM23 38L24 37L26 39L27 38L27 36L28 35L30 35L31 36L31 38L30 39L28 39L26 41ZM35 46L38 43L39 44L36 47ZM39 38L40 37L41 38L41 40L40 41L39 40Z%22/><path fill=%22%23656464%22 fill-rule=%22evenodd%22 d=%22M13 42L14 41L19 46L18 47ZM23 48L28 43L36 43L37 44L34 47L32 47L30 49L24 49Z%22/></svg>',
+    'sina-news': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23fefefe%22 fill-rule=%22evenodd%22 d=%22M9 36L16 29L20 29L22 27L34 27L36 29L40 29L47 36L47 42L42 47L40 47L38 49L34 49L32 51L26 51L25 50L26 49L32 49L34 47L36 47L39 44L39 42L41 40L41 38L39 36L39 34L36 31L32 31L30 29L22 29L20 31L18 31L13 36L13 44L15 46L14 47L11 44L11 42L9 40ZM17 42L22 37L27 42L22 47Z%22/><path fill=%22%23d61c16%22 fill-rule=%22evenodd%22 d=%22M17 52L18 51L38 51L40 49L42 49L49 42L49 36L47 34L47 32L45 30L46 29L48 29L50 27L56 27L57 28L57 30L59 32L59 40L57 42L57 44L52 49L50 49L48 51L46 51L44 53L40 53L38 55L24 55L22 53L18 53Z%22/><path fill=%22%23fd9995%22 fill-rule=%22evenodd%22 d=%22M7 24L8 23L10 23L11 22L11 20L12 19L15 22L14 23L12 23L8 27L7 26ZM17 20L18 19L20 19L21 18L19 16L20 15L22 17L30 17L32 15L34 17L36 15L40 15L45 20L44 21L42 19L40 21L22 21L20 23L18 23L17 22ZM43 46L46 43L47 44L44 47ZM47 20L48 19L50 19L51 18L49 16L50 15L52 17L54 15L55 16L55 18L54 19L52 19L50 21L48 21Z%22/><path fill=%22%23fe5954%22 fill-rule=%22evenodd%22 d=%22M3 34L4 33L6 33L7 34L7 42L6 43L5 42L5 38L3 36ZM5 24L7 22L7 20L8 19L9 20L9 22L7 24L7 26L6 27L5 26ZM7 30L10 27L12 27L14 25L18 25L19 26L18 27L14 27L12 29L10 29L8 31ZM9 16L12 13L13 14L10 17ZM9 44L10 43L13 46L12 47ZM15 20L17 18L17 16L20 13L21 14L19 16L19 18L16 21ZM21 10L24 7L25 8L22 11ZM21 24L22 23L28 23L30 25L32 25L33 26L32 27L30 27L28 25L26 27L24 25L22 25ZM47 24L48 23L54 23L57 26L56 27L54 25L48 25Z%22/><path fill=%22%23484646%22 fill-rule=%22evenodd%22 d=%22M13 38L14 37L17 40L17 42L16 43L13 40ZM27 40L28 39L38 39L39 40L39 42L38 43L28 43L27 42Z%22/><path fill=%22%23fe7a76%22 fill-rule=%22evenodd%22 d=%22M5 28L6 27L8 27L12 23L20 23L22 21L40 21L42 19L44 21L46 19L48 21L50 21L52 19L54 19L55 20L55 22L57 24L56 25L54 23L22 23L20 25L14 25L12 27L10 27L8 29L6 29ZM47 38L48 37L49 38L49 40L48 41L47 40Z%22/><path fill=%22%23ffcac8%22 fill-rule=%22evenodd%22 d=%22M9 20L12 17L13 18L11 20L11 22L10 23L9 22ZM19 18L25 12L23 10L24 9L26 9L27 10L27 16L26 17L22 17L20 19ZM33 16L39 10L39 6L40 5L41 6L41 14L43 16L42 17L40 15L36 15L34 17ZM49 18L52 15L53 16L50 19Z%22/><path fill=%22%23fb322c%22 fill-rule=%22evenodd%22 d=%22M3 28L4 27L5 28L5 32L4 33L3 32ZM3 38L4 37L5 38L5 42L6 43L7 42L7 32L10 29L12 29L14 27L16 27L17 28L16 29L14 29L9 34L9 44L12 47L14 47L16 49L18 49L19 50L18 51L16 51L14 49L10 49L3 42ZM19 26L20 25L24 25L25 26L24 27L20 27ZM29 24L30 23L46 23L48 25L54 25L55 26L54 27L50 27L48 29L46 29L45 30L47 32L46 33L42 29L40 29L38 27L34 27L32 25L30 25ZM47 16L48 15L49 16L49 18L48 19L47 18Z%22/><path fill=%22%23282626%22 fill-rule=%22evenodd%22 d=%22M15 36L20 31L32 31L34 33L36 33L37 34L37 36L39 38L38 39L32 39L31 38L31 36L30 35L28 35L26 37L18 37L16 39L15 38Z%22/><path fill=%22%23ffe5e4%22 fill-rule=%22evenodd%22 d=%22M21 14L24 11L25 12L22 15ZM33 14L35 12L35 10L37 8L37 6L38 5L39 6L39 10L34 15Z%22/><path fill=%22%23d9d9d9%22 fill-rule=%22evenodd%22 d=%22M15 46L18 43L22 47L26 43L27 44L22 49L20 49L19 48L19 46L18 45L16 47ZM17 40L20 37L21 38L18 41ZM21 30L22 29L26 29L27 30L26 31L22 31ZM23 38L24 37L26 39L27 38L27 36L28 35L30 35L31 36L31 38L30 39L28 39L26 41ZM35 46L38 43L39 44L36 47ZM39 38L40 37L41 38L41 40L40 41L39 40Z%22/><path fill=%22%23656464%22 fill-rule=%22evenodd%22 d=%22M13 42L14 41L19 46L18 47ZM23 48L28 43L36 43L37 44L34 47L32 47L30 49L24 49Z%22/></svg>',
+    'smzdm': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23fa0f00%22 fill-rule=%22evenodd%22 d=%22M-1 24L1 22L1 18L3 16L3 14L14 3L16 3L18 1L22 1L24 -1L38 -1L40 1L44 1L46 3L48 3L59 14L59 16L61 18L61 22L63 24L63 38L61 40L61 44L59 46L59 48L48 59L46 59L44 61L40 61L38 63L24 63L22 61L18 61L16 59L14 59L3 48L3 46L1 44L1 40L-1 38ZM5 36L7 34L7 32L9 30L9 28L11 26L11 24L13 22L13 12L14 11L20 11L21 12L21 16L22 17L26 17L28 15L30 15L31 14L29 12L29 8L32 5L34 7L36 7L37 8L37 12L38 13L40 11L44 11L47 14L44 17L40 17L39 18L40 19L42 19L45 22L45 32L47 34L47 40L48 41L50 41L52 39L54 41L56 41L57 42L57 44L56 45L54 45L52 47L42 47L40 49L34 49L32 51L28 51L26 53L23 50L23 40L22 39L21 40L21 50L23 52L20 55L18 55L17 54L17 52L15 50L15 34L14 33L8 39L6 39L5 38ZM17 24L19 22L19 20L20 19L22 21L28 21L29 22L28 23L26 23L25 24L25 26L27 28L27 32L26 33L24 31L22 31L20 33L19 32L19 28L17 26ZM27 38L28 37L29 38L29 40L28 41L27 40ZM33 32L34 31L38 31L39 32L38 33L34 33ZM33 38L34 37L36 37L37 38L36 39L34 39ZM35 26L36 25L38 25L39 26L38 27L36 27ZM39 42L40 41L42 41L43 42L42 43L40 43Z%22/><path fill=%22%23fffdfd%22 fill-rule=%22evenodd%22 d=%22M9 32L11 30L11 28L13 26L13 24L15 22L15 12L16 11L19 14L19 18L17 20L17 24L15 26L17 28L17 32L19 34L19 48L21 50L21 52L20 53L17 50L17 34L15 32L15 30L14 29L10 33ZM23 34L24 33L25 34L25 40L27 42L27 46L28 47L32 47L33 48L32 49L28 49L26 51L25 50L25 42L23 40ZM25 18L26 17L30 17L31 16L31 8L32 7L35 10L35 14L36 15L38 15L40 13L44 13L45 14L44 15L40 15L38 17L36 17L33 20L33 22L35 24L34 25L32 25L31 24L31 20L30 19L26 19ZM29 30L30 29L32 29L33 30L31 32L31 34L33 36L30 39L29 38ZM35 40L36 39L38 39L39 40L38 41L36 41ZM35 46L36 45L40 45L41 46L40 47L36 47ZM37 22L38 21L42 21L43 22L43 30L45 32L45 40L44 41L41 38L41 26ZM43 44L44 43L50 43L52 41L55 44L54 45L44 45Z%22/><path fill=%22%23fa3427%22 fill-rule=%22evenodd%22 d=%22M5 36L6 35L9 38L8 39L6 39L5 38ZM11 34L14 31L15 32L12 35ZM19 18L20 17L22 17L23 18L23 20L22 21ZM19 34L20 33L21 34L21 36L23 38L22 39L19 36ZM27 42L28 41L31 44L30 45L28 45L27 44ZM29 20L30 19L31 20L31 22L30 23L29 22ZM37 18L38 17L39 18L39 20L38 21L37 20ZM37 36L40 33L41 34L38 37ZM43 16L46 13L47 14L44 17Z%22/><path fill=%22%23fee9e8%22 fill-rule=%22evenodd%22 d=%22M7 36L10 33L11 34L8 37ZM15 34L18 31L19 32L16 35ZM23 42L26 39L27 40L24 43ZM27 28L30 25L31 26L31 28L30 29L28 29ZM29 40L30 39L32 39L33 40L32 41L30 41ZM33 20L34 19L35 20L35 22L34 23L33 22ZM33 46L34 45L35 46L35 48L34 49L33 48ZM41 44L42 43L43 44L43 46L42 47L41 46Z%22/><path fill=%22%23fec9c6%22 fill-rule=%22evenodd%22 d=%22M11 32L14 29L15 30L12 33ZM23 44L24 43L25 44L25 48L24 49L23 48ZM31 38L34 35L35 36L32 39ZM33 30L36 27L37 28L34 31ZM35 22L36 21L37 22L37 24L36 25L35 24ZM43 22L44 21L45 22L45 24L44 25L43 24Z%22/><path fill=%22%23fda9a4%22 fill-rule=%22evenodd%22 d=%22M15 38L16 37L17 38L17 42L16 43L15 42ZM19 42L20 41L21 42L21 44L20 45L19 44ZM29 42L30 41L33 44L33 46L32 47L31 46L31 44ZM31 34L32 33L34 33L35 34L34 35L32 35ZM41 12L42 11L44 11L45 12L44 13L42 13Z%22/><path fill=%22%23fc736a%22 fill-rule=%22evenodd%22 d=%22M13 16L14 15L15 16L15 18L14 19L13 18ZM15 44L16 43L17 44L17 48L16 49L15 48ZM23 20L24 19L26 19L27 20L26 21L24 21ZM23 32L24 31L26 33L28 33L29 34L28 35L26 35ZM25 26L28 23L29 24L26 27ZM27 46L28 45L30 45L31 46L30 47L28 47ZM35 30L38 27L41 30L40 31L38 29L36 31ZM35 36L36 35L39 38L38 39ZM35 42L36 41L39 44L38 45ZM39 20L40 19L42 19L43 20L42 21L40 21ZM43 42L46 39L47 40L47 42L46 43L44 43Z%22/></svg>',
+    'sspai': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23d6161b%22 fill-rule=%22evenodd%22 d=%22M5 30L7 28L7 22L9 20L9 18L18 9L20 9L22 7L40 7L44 11L46 11L51 16L51 18L53 20L53 22L55 24L55 36L53 38L53 42L42 53L38 53L36 55L24 55L22 53L20 53L18 51L16 51L9 44L9 42L7 40L7 34L5 32ZM15 24L18 21L26 21L28 19L38 19L40 17L42 17L43 18L43 22L42 23L40 23L39 24L39 38L41 40L41 44L40 45L38 45L33 40L33 26L32 25L30 25L27 28L27 42L24 45L21 42L21 28L20 27L16 27L15 26Z%22/><path fill=%22%23fefdfd%22 fill-rule=%22evenodd%22 d=%22M17 24L18 23L26 23L28 21L38 21L40 19L41 20L41 22L40 23L38 23L37 24L37 38L39 40L39 42L38 43L35 40L35 26L32 23L30 23L28 25L26 25L25 26L25 42L24 43L23 42L23 26L22 25L18 25Z%22/><path fill=%22%23fbe7e8%22 fill-rule=%22evenodd%22 d=%22M25 26L26 25L27 26L27 40L26 41L25 40ZM33 26L34 25L35 26L35 36L34 37L33 36Z%22/><path fill=%22%23dd3d41%22 fill-rule=%22evenodd%22 d=%22M15 24L16 23L17 24L17 26L16 27L15 26ZM21 28L22 27L23 28L23 42L25 44L24 45L21 42ZM37 26L38 25L39 26L39 34L38 35L37 34ZM39 18L40 17L42 17L43 18L42 19L40 19Z%22/><path fill=%22%23efa1a2%22 fill-rule=%22evenodd%22 d=%22M19 26L20 25L22 25L23 26L22 27L20 27Z%22/></svg>',
+    'starrail': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23fcf4f0%22 fill-rule=%22evenodd%22 d=%22M-1 6L1 4L1 2L4 -1L5 0L3 2L3 4L1 6L1 10L0 11L-1 10ZM-1 20L5 14L5 12L7 10L7 8L9 6L9 2L12 -1L42 -1L45 2L45 4L49 8L49 10L48 11L46 11L45 10L45 8L42 5L41 6L41 8L43 10L40 13L38 13L36 11L34 13L32 13L31 12L31 10L30 9L29 10L29 20L31 22L30 23L28 23L27 22L27 20L24 17L22 19L21 18L21 14L19 12L19 8L18 7L17 8L17 14L15 16L15 18L14 19L12 19L10 17L9 18L9 22L11 24L11 28L13 30L12 31L9 28L9 26L5 22L5 20L4 19L2 19L0 21ZM17 22L18 21L20 21L21 22L21 24L20 25L18 25L17 24ZM17 30L18 29L24 29L28 25L30 27L32 27L34 25L37 28L37 30L38 31L42 31L45 34L41 38L41 40L40 41L38 41L34 45L30 45L28 43L24 43L17 36L18 35L20 35L21 34L21 32L20 31L18 31ZM25 36L28 33L36 33L37 34L37 38L32 43L30 43L25 38ZM43 14L44 13L46 13L47 14L46 15L44 15ZM45 54L48 51L50 51L51 50L51 46L52 45L54 45L55 46L55 48L57 50L57 52L59 54L58 55L56 55L55 54L55 50L54 49L50 53L48 53L46 55ZM47 0L48 -1L49 0L49 2L52 5L56 5L57 4L53 0L54 -1L60 5L62 3L63 4L60 7L54 7L53 8L55 10L54 11L51 8L51 6L47 2ZM47 20L48 19L49 20L49 22L48 23L47 22ZM49 16L50 15L54 15L55 16L54 17L50 17Z%22/><path fill=%22%23f0d7d1%22 fill-rule=%22evenodd%22 d=%22M-1 0L0 -1L2 -1L5 2L4 3L2 1L1 2L1 4L3 6L3 8L2 9L1 8L1 6L-1 4ZM-1 12L0 11L1 12L1 14L0 15L-1 14ZM-1 36L0 35L2 35L3 36L3 38L1 40L1 42L0 43L-1 42ZM-1 54L1 52L1 50L2 49L3 50L3 52L0 55ZM5 8L7 6L7 4L8 3L9 4L9 6L7 8L7 10L6 11L5 10ZM5 24L6 23L9 26L8 27L6 27L5 26ZM9 18L10 17L12 19L14 19L16 21L18 19L19 20L17 22L17 24L16 25L12 21L10 23L9 22ZM13 32L14 31L20 31L21 32L21 34L20 35L18 33L14 33ZM17 8L18 7L19 8L19 10L18 11L17 10ZM17 44L18 43L19 44L19 46L18 47L17 46ZM19 14L20 13L21 14L21 16L20 17L19 16ZM19 40L20 39L23 42L22 43ZM21 20L24 17L27 20L25 22L25 24L27 26L24 29L23 28L23 26L21 24ZM27 34L28 33L30 33L31 34L30 35L28 35ZM27 44L30 41L32 41L33 42L32 43L30 43L28 45ZM29 10L30 9L31 10L31 12L30 13L29 12ZM29 24L31 22L31 18L32 17L34 17L35 16L33 14L34 13L36 15L38 15L39 16L39 18L38 19L36 17L33 20L33 22L34 23L36 23L38 25L40 25L43 28L40 31L38 31L37 30L37 26L36 25L34 25L32 27L30 27L29 26ZM35 44L38 41L39 42L36 45ZM39 4L40 3L45 8L45 10L46 11L50 11L51 12L50 13L46 13L44 11L43 12L43 14L42 15L41 14L41 12L43 10L41 8L41 6ZM43 0L44 -1L46 -1L47 0L46 1L44 1ZM45 16L46 15L48 15L49 16L48 17L46 17ZM45 24L46 23L48 23L49 22L49 20L50 19L53 22L53 24L52 25L50 23L46 27L45 26ZM45 52L48 49L50 49L52 51L54 49L55 50L52 53L50 51L48 51L47 52L49 54L48 55ZM49 2L50 1L53 4L50 7L49 6L51 4ZM53 8L54 7L60 7L61 6L59 4L59 2L60 1L62 1L63 2L61 4L63 6L63 20L62 21L60 21L58 19L54 19L53 18L55 16L55 14L53 12L55 10ZM53 44L54 43L56 43L57 44L56 45L54 45ZM57 48L58 47L62 47L63 48L63 54L62 55L60 55L57 52Z%22/><path fill=%22%23ac7690%22 fill-rule=%22evenodd%22 d=%22M-1 34L0 33L2 33L4 31L5 32L5 36L4 37L2 35L0 35ZM-1 44L2 41L3 42L0 45ZM3 48L6 45L7 46L5 48L5 52L6 53L8 51L9 52L6 55L4 55L3 54ZM5 2L8 -1L9 0L6 3ZM7 36L8 35L12 39L18 39L19 40L19 42L17 44L17 52L19 54L18 55L16 53L14 55L12 55L11 54L11 52L13 50L13 48L15 46L15 44L14 43L12 43L11 42L11 40L10 39L8 41L7 40L9 38ZM11 34L12 33L14 33L15 34L15 36L14 37ZM21 46L22 45L24 45L25 46L25 48L24 49L22 49L21 48ZM25 60L28 57L29 58L27 60L27 62L26 63L25 62ZM29 54L30 53L34 53L35 54L34 55L30 55ZM31 60L32 59L34 59L36 57L38 57L40 59L42 59L43 60L40 63L38 61L36 61L34 63ZM35 22L36 21L38 23L40 23L41 24L40 25L38 25ZM37 44L42 39L44 41L46 41L47 40L45 38L46 37L48 37L51 40L49 42L49 44L46 47L44 47L40 43L39 44L39 46L38 47L37 46ZM43 50L44 49L46 49L47 50L46 51L44 51ZM51 34L52 33L54 33L55 32L55 28L56 27L57 28L57 30L58 31L60 29L63 32L63 34L62 35L60 33L56 33L55 34L55 36L54 37ZM51 44L58 37L59 38L57 40L57 42L56 43L54 43L52 45ZM57 0L58 -1L59 0L59 2L58 3L57 2ZM59 22L60 21L62 21L63 22L62 23L60 23Z%22/><path fill=%22%23996471%22 fill-rule=%22evenodd%22 d=%22M3 38L4 37L5 38L5 40L4 41L3 40ZM7 38L8 37L11 40L10 41ZM7 54L9 52L9 50L12 47L13 48L13 50L8 55ZM13 30L14 29L16 29L20 25L21 26L16 31L14 31ZM19 42L20 41L23 44L22 45L20 45L19 44ZM21 58L22 57L24 57L25 58L24 59L22 59ZM23 50L25 48L25 46L26 45L28 47L34 47L36 45L37 46L35 48L37 50L36 51L32 51L30 49L28 49L27 50L27 54L26 55L24 55L23 54ZM27 62L28 61L32 61L33 62L32 63L28 63ZM31 58L32 57L34 57L38 53L39 54L34 59L32 59ZM39 44L43 40L43 38L46 35L47 36L45 38L47 40L46 41L44 41L43 42L45 44L43 46L44 47L46 47L48 45L50 45L51 46L50 47L48 47L46 49L44 49L42 47L40 47L39 46ZM41 20L42 19L43 20L43 22L45 24L44 25L41 22ZM51 32L53 30L53 26L54 25L55 26L55 32L56 33L60 33L61 34L61 38L63 40L62 41L60 41L58 43L57 42L57 40L55 38L55 34L54 33L52 33Z%22/><path fill=%22%23cc97b0%22 fill-rule=%22evenodd%22 d=%22M-1 16L0 15L2 15L3 16L0 19L-1 18ZM-1 30L0 29L2 31L3 30L3 28L1 26L1 24L2 23L4 23L5 24L5 26L7 28L7 32L8 33L10 31L11 32L9 34L10 35L12 35L14 37L16 35L17 36L14 39L12 39L8 35L7 36L7 40L8 41L10 41L15 46L14 47L12 47L6 53L5 52L5 48L7 46L6 45L4 45L3 46L3 48L2 49L-1 46L3 42L1 40L2 39L4 41L5 40L5 32L4 31L2 33ZM1 10L3 8L3 4L4 3L6 3L7 4L5 6L5 12L4 13L2 13L1 12ZM15 18L18 15L19 16L17 18L17 20L16 21L15 20ZM17 52L19 50L19 46L20 45L21 46L21 48L23 50L23 54L22 55L20 53L18 53ZM19 28L22 25L23 26L20 29ZM27 60L30 57L31 58L28 61ZM31 14L32 13L33 14L33 16L32 17L31 16ZM33 46L34 45L36 47L38 47L39 48L38 49L36 49ZM35 52L36 51L37 52L37 54L36 55L35 54ZM37 14L38 13L40 13L43 16L43 18L44 19L46 17L47 18L44 21L42 19L40 19L39 18L39 16ZM37 22L38 21L40 21L41 22L40 23L38 23ZM41 52L42 51L45 54L44 55ZM43 30L46 27L48 27L49 28L49 32L55 38L55 40L50 45L49 44L51 42L51 40L47 36L47 30L46 29L44 31ZM49 8L50 7L51 8L51 10L50 11L49 10ZM49 54L50 53L52 53L54 51L55 52L55 54L54 55L50 55ZM53 20L54 19L56 19L60 23L62 23L63 24L61 26L63 28L62 29L60 29L58 31L57 30L57 28L53 24ZM55 48L57 46L57 44L58 43L60 45L61 44L61 42L62 41L63 42L63 46L62 47L58 47L56 49ZM57 24L58 23L59 24L59 26L58 27L57 26Z%22/><path fill=%22%232e2536%22 fill-rule=%22evenodd%22 d=%22M3 56L4 55L6 55L7 56L7 60L4 63L3 62ZM9 58L12 55L16 55L19 58L19 62L18 63L12 57L11 58L11 62L10 63L9 62ZM21 56L22 55L24 55L25 56L24 57L22 57ZM27 50L28 49L30 49L31 50L31 52L28 55L27 54ZM37 50L40 47L43 50L42 51L40 51L38 53L37 52ZM39 56L40 55L42 55L43 56L42 57L40 57ZM47 58L48 57L49 58L49 62L48 63L47 62ZM59 62L62 59L63 60L63 62L62 63L60 63Z%22/><path fill=%22%2338354a%22 fill-rule=%22evenodd%22 d=%22M-1 56L0 55L2 55L3 56L3 62L2 63L0 63L-1 62ZM5 62L7 60L7 56L8 55L10 55L17 62L16 63L12 63L11 62L11 58L10 57L9 58L9 62L8 63L6 63ZM17 56L18 55L20 55L21 56L21 58L20 59ZM25 56L26 55L32 55L33 56L32 57L28 57L26 59L25 58ZM31 52L32 51L34 51L35 52L34 53L32 53ZM35 62L36 61L38 61L39 62L38 63L36 63ZM37 20L38 19L40 19L41 20L40 21L38 21ZM41 58L44 55L46 57L48 55L50 55L52 57L54 55L62 55L63 56L63 58L58 63L56 63L54 61L52 63L50 63L49 62L49 58L48 57L47 58L47 62L46 63L42 63L41 62L42 61L44 61L45 60L44 59L42 59Z%22/><path fill=%22%23e8b7b2%22 fill-rule=%22evenodd%22 d=%22M-1 32L1 30L1 28L2 27L3 28L3 30L0 33ZM7 28L8 27L13 32L10 35L7 32ZM13 26L14 25L16 25L17 26L16 27L14 27ZM15 34L16 33L18 33L19 34L18 35L16 35ZM15 38L16 37L18 37L19 38L18 39L16 39ZM17 18L18 17L20 17L21 18L21 20L20 21ZM17 48L18 47L19 48L19 50L18 51L17 50ZM25 24L26 23L28 23L29 24L28 25L26 25ZM25 38L26 37L28 37L32 33L36 33L37 34L37 38L34 41L28 41ZM29 14L30 13L31 14L31 20L30 21L29 20ZM29 46L30 45L32 45L33 46L32 47L30 47ZM33 16L34 15L37 18L34 21L33 20L35 18ZM41 24L42 23L45 26L45 28L42 31L41 30L43 28L41 26ZM45 20L48 17L52 17L53 18L53 20L52 21L50 19L48 19L47 20L47 22L46 23L45 22ZM47 14L48 13L50 13L51 14L50 15L48 15ZM47 26L50 23L53 26L51 28L51 32L50 33L49 32L49 28ZM57 24L58 23L59 24L59 26L58 27L57 26Z%22/></svg>',
+    'tencent-news': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23fefefe%22 fill-rule=%22evenodd%22 d=%22M1 42L2 41L4 43L9 38L7 36L7 24L9 22L9 18L11 16L11 14L24 1L26 1L28 -1L34 -1L35 0L33 2L33 6L36 9L40 9L42 11L44 11L55 22L55 24L57 26L57 30L59 32L59 46L57 48L57 50L56 51L55 50L55 48L52 45L50 45L46 49L44 49L40 53L36 53L34 55L18 55L16 53L12 53L8 49L6 49L1 44ZM17 34L19 32L19 28L21 26L21 20L23 18L23 16L24 15L26 15L28 13L34 13L36 15L38 15L39 16L39 18L41 20L41 26L43 28L43 32L45 34L45 40L44 41L42 39L39 42L41 44L41 46L40 47L22 47L21 46L21 44L23 42L20 39L18 41L17 40Z%22/><path fill=%22%230152d4%22 fill-rule=%22evenodd%22 d=%22M19 34L21 32L21 28L23 26L23 20L28 15L34 15L39 20L39 26L41 28L41 32L43 34L43 36L42 37L40 37L39 38L39 40L37 42L39 44L38 45L24 45L23 44L25 42L23 40L23 38L22 37L20 37L19 36Z%22/><path fill=%22%23ff0156%22 fill-rule=%22evenodd%22 d=%22M5 50L6 49L10 53L14 53L16 55L22 55L24 57L28 57L30 55L36 55L38 53L40 53L42 51L44 51L48 47L52 47L55 50L55 52L50 57L48 57L44 61L40 61L38 63L24 63L22 61L18 61L14 57L12 57Z%22/><path fill=%22%232ad6a9%22 fill-rule=%22evenodd%22 d=%22M35 2L38 -1L40 1L44 1L46 3L48 3L59 14L59 16L61 18L61 22L63 24L63 38L62 39L59 36L59 28L57 26L57 24L55 22L55 20L46 11L44 11L42 9L40 9L38 7L36 7L35 6Z%22/><path fill=%22%23ffd219%22 fill-rule=%22evenodd%22 d=%22M-1 24L1 22L1 18L3 16L3 14L14 3L16 3L18 1L22 1L24 -1L26 -1L27 0L26 1L24 1L20 5L18 5L15 8L15 10L11 14L11 16L9 18L9 22L7 24L7 36L9 38L4 43L-1 38Z%22/><path fill=%22%23d8e4f8%22 fill-rule=%22evenodd%22 d=%22M7 50L8 49L11 52L10 53ZM15 8L18 5L19 6L16 9ZM21 46L22 45L40 45L41 46L40 47L22 47ZM23 56L24 55L28 55L29 56L28 57L24 57ZM33 2L36 -1L37 0L35 2L35 6L37 8L36 9L33 6ZM47 14L48 13L53 18L52 19ZM49 46L50 45L52 45L55 48L54 49L52 47L50 47ZM57 28L58 27L59 28L59 30L58 31L57 30Z%22/><path fill=%22%23296dda%22 fill-rule=%22evenodd%22 d=%22M21 24L22 23L23 24L23 26L22 27L21 26ZM23 18L26 15L27 16L24 19ZM35 16L36 15L39 18L38 19ZM39 24L40 23L41 24L41 26L40 27L39 26Z%22/><path fill=%22%236899e5%22 fill-rule=%22evenodd%22 d=%22M17 36L18 35L23 40L22 41L20 39L18 39L17 38ZM29 14L30 13L32 13L33 14L32 15L30 15ZM39 40L44 35L45 36L45 38L44 39L42 39L40 41ZM59 38L60 37L61 38L61 40L60 41L59 40Z%22/></svg>',
+    'thepaper': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23231815%22 fill-rule=%22evenodd%22 d=%22M3 26L4 25L8 25L9 26L7 28L7 30L8 32L11 36L11 46L12 48L14 50L14 50L16 48L20 41L21 42L21 46L15 58L12 61L10 62L8 60L8 50L7 38L4 32ZM10 20L12 18L12 16L10 14L12 12L14 12L18 14L20 15L22 20L20 22L18 22L16 22L12 21ZM12 28L14 27L22 26L28 23L31 20L31 16L30 15L26 14L25 12L25 10L30 8L31 6L30 4L31 2L34 -1L35 0L35 2L35 6L36 8L40 8L41 10L40 13L36 14L33 16L34 18L40 16L42 18L40 21L31 26L32 28L36 27L39 28L39 30L37 32L38 36L37 38L40 40L40 42L40 44L38 46L37 48L40 49L42 50L41 54L34 57L28 63L24 63L22 62L21 60L21 56L21 54L26 50L22 38L23 32L22 31L16 32L14 32ZM25 30L30 27L32 28L26 32ZM45 42L49 36L49 34L49 30L50 29L52 29L55 32L57 36L55 38L52 39L48 43L46 44ZM44 58L50 52L51 50L51 48L50 46L51 44L52 43L56 46L59 50L59 54L48 59L46 59ZM48 12L52 9L54 9L55 10L56 12L54 16L52 20L50 21L48 20L50 16Z%22/></svg>',
+    'tieba': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%232932e1%22 fill-rule=%22evenodd%22 d=%22M-1 2L2 -1L60 -1L63 2L63 60L60 63L2 63L-1 60ZM3 4L4 3L58 3L59 4L59 58L58 59L4 59L3 58ZM7 24L9 22L9 20L10 19L16 19L17 20L17 22L19 24L19 26L17 28L17 30L16 31L10 31L9 30L9 28L7 26ZM11 44L25 30L25 28L26 27L28 27L30 25L32 27L34 27L49 42L49 44L51 46L51 50L49 52L49 54L48 55L46 55L44 57L42 57L40 55L16 55L11 50ZM21 8L22 7L28 7L29 8L29 18L28 19L26 19L24 21L21 18ZM35 12L40 7L42 7L43 8L43 10L45 12L45 16L40 21L38 21L35 18ZM43 28L45 26L45 24L48 21L50 23L52 23L53 24L53 26L55 28L55 30L53 32L53 34L52 35L46 35L45 34L45 32L43 30Z%22/><path fill=%22%23fefefe%22 fill-rule=%22evenodd%22 d=%22M3 6L6 3L56 3L59 6L59 56L56 59L6 59L3 56ZM7 20L10 17L16 17L19 20L19 30L16 33L10 33L7 30ZM9 44L13 40L13 38L14 37L16 37L21 32L21 30L26 25L36 25L39 28L39 30L42 33L43 32L43 24L46 21L52 21L55 24L55 34L52 37L48 37L47 38L51 42L51 44L53 46L53 50L51 52L51 54L48 57L14 57L11 54L11 52L9 50ZM19 8L22 5L28 5L31 8L31 18L28 21L22 21L19 18ZM33 12L35 10L35 8L38 5L42 5L45 8L45 10L47 12L47 16L45 18L45 20L44 21L42 21L40 23L38 23L36 21L34 21L33 20Z%22/><path fill=%22%23c6c8f7%22 fill-rule=%22evenodd%22 d=%22M7 30L8 29L11 32L10 33ZM9 46L10 45L11 46L11 48L10 49L9 48ZM15 18L16 17L18 19L20 17L21 18L18 21ZM23 28L26 25L27 26L24 29ZM37 22L38 21L40 21L41 22L40 23L38 23ZM43 36L44 35L46 35L47 36L46 37L44 37ZM47 56L50 53L51 54L48 57ZM51 36L54 33L55 34L52 37ZM51 46L52 45L53 46L53 48L52 49L51 48Z%22/><path fill=%22%23424ae4%22 fill-rule=%22evenodd%22 d=%22M11 18L12 17L14 17L15 18L14 19L12 19ZM19 12L20 11L21 12L21 14L20 15L19 14ZM21 32L24 29L25 30L22 33ZM23 6L24 5L26 5L27 6L26 7L24 7ZM35 10L38 7L39 8L36 11Z%22/><path fill=%22%23e7e8fb%22 fill-rule=%22evenodd%22 d=%22M11 54L12 53L15 56L14 57ZM29 56L30 55L32 55L33 56L32 57L30 57ZM35 8L38 5L39 6L36 9ZM35 26L36 25L39 28L38 29Z%22/><path fill=%22%23a6aaf2%22 fill-rule=%22evenodd%22 d=%22M15 32L18 29L19 30L16 33ZM41 34L42 33L44 33L45 34L44 35L42 35ZM45 38L48 35L49 36L46 39Z%22/><path fill=%22%236b72ea%22 fill-rule=%22evenodd%22 d=%22M11 32L12 31L14 31L15 32L14 33L12 33ZM15 38L20 33L21 34L16 39ZM29 12L30 11L31 12L31 14L30 15L29 14ZM33 14L34 13L35 14L35 16L34 17L33 16Z%22/></svg>',
+    'toutiao': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23fffefe%22 fill-rule=%22evenodd%22 d=%22M0 6L4 1L8 -1L52 -1L56 0L58 1L61 4L63 8L62 9L52 11L26 11L12 13L0 13L-1 12ZM-1 54L0 53L12 51L36 51L54 49L62 49L63 50L63 54L61 58L58 61L54 63L8 63L6 62L2 59ZM5 36L8 35L16 35L18 34L19 32L19 20L22 19L23 20L23 28L21 32L22 33L28 33L29 34L28 36L26 36L20 37L12 45L10 45L9 44L15 38L14 37L8 37ZM8 22L10 21L14 21L16 22L14 23L10 23ZM9 28L10 27L14 27L15 28L14 31L10 29ZM23 40L24 39L26 39L28 42L26 43ZM33 22L36 18L38 18L40 19L46 19L54 18L55 20L51 24L50 26L56 28L54 29L48 29L46 27L44 27L42 28L38 29L34 31L33 30L34 29L39 26ZM33 34L34 33L42 33L44 31L48 33L54 33L56 34L54 35L46 35L45 36L45 42L44 43L43 42L43 36L42 35L34 35ZM33 42L36 39L38 39L39 40L36 43L34 43ZM39 22L40 21L48 21L49 22L46 25L44 25L42 25ZM50 38L52 38L54 40L55 42L54 43L52 42Z%22/><path fill=%22%23ff363b%22 fill-rule=%22evenodd%22 d=%22M-1 16L0 15L10 13L36 13L48 11L62 11L63 12L63 14L63 46L62 47L52 49L26 49L14 51L0 51L-1 50L-1 48ZM5 34L6 33L8 33L16 33L18 31L19 28L19 18L20 17L22 17L23 18L24 20L23 32L24 33L26 33L30 33L32 32L31 30L31 28L32 27L36 27L37 26L34 24L33 22L33 20L36 17L54 17L56 18L56 20L53 24L57 28L57 34L56 35L52 36L57 42L56 43L52 43L49 40L49 38L48 36L47 38L47 42L46 44L44 45L42 44L40 42L41 40L40 38L39 40L40 42L36 45L34 45L32 44L33 40L35 38L34 37L30 37L26 38L28 40L30 44L31 44L26 45L21 40L23 38L22 38L14 45L8 47L7 44L10 41L12 39L13 38L12 37L10 39L6 39L5 36ZM7 20L8 19L14 19L16 20L17 22L17 24L16 25L10 26L7 22ZM7 28L8 26L16 27L17 28L17 30L16 31L8 31L7 30Z%22/><path fill=%22%23ff565a%22 fill-rule=%22evenodd%22 d=%22M0 14L8 13L22 14L24 15L38 15L39 16L36 17L31 20L37 26L36 27L34 25L32 26L32 28L30 28L29 30L30 31L34 32L38 31L40 29L44 30L46 29L48 30L50 29L52 30L50 31L44 30L42 31L40 33L26 32L25 32L24 30L23 16L22 14L20 15L19 16L21 18L18 20L16 21L13 20L16 18L12 17L8 17L5 22L6 23L8 23L12 25L16 26L18 24L19 30L18 32L18 32L18 28L16 26L10 27L6 27L5 28L6 30L5 32L7 34L4 36L6 37L12 37L13 38L12 41L10 39L5 40L7 42L6 44L8 45L12 45L14 46L22 40L20 38L22 37L26 37L28 38L32 36L32 38L34 40L33 42L33 46L32 47L30 47L28 46L30 42L26 39L24 39L22 40L21 42L22 43L24 43L26 46L24 47L17 48L24 49L26 50L16 51L0 49L0 18L0 17L7 16L0 15ZM37 12L46 11L62 13L62 44L62 45L52 46L62 47L62 48L56 49L44 48L38 47L37 46L38 43L40 44L42 43L44 43L48 43L50 41L52 43L58 43L59 42L58 41L56 41L52 37L50 37L48 39L47 38L47 36L48 35L56 35L58 34L58 28L53 26L56 24L55 20L55 18L54 16L40 14ZM39 38L40 36L42 38L42 40L40 41ZM41 22L42 21L46 21L47 22L44 24Z%22/><path fill=%22%23ffe5e6%22 fill-rule=%22evenodd%22 d=%22M0 8L2 4L4 2L8 0L12 0L54 0L58 2L60 4L62 8L62 10L58 11L30 11L26 11L22 12L14 13L0 12L0 12ZM0 54L0 52L8 51L32 51L42 49L48 49L62 50L62 50L62 54L60 58L58 60L55 62L52 62L8 62L4 60L2 58ZM5 36L6 35L8 36L16 35L17 34L19 32L19 20L20 19L22 20L23 30L21 32L22 33L28 33L29 34L29 36L28 37L20 37L12 45L10 44L15 38L14 36L6 37ZM7 22L8 21L16 21L17 22L16 23L8 23ZM8 28L8 28L14 28L15 28L16 30L14 31L10 30ZM24 40L26 39L28 41L29 42L28 44L26 44ZM33 22L36 20L35 18L36 17L38 17L40 20L42 20L54 17L55 18L54 22L52 22L51 24L51 26L52 28L56 27L57 28L56 29L48 29L46 28L44 27L42 29L38 29L36 31L34 30L33 30L34 28L38 27L39 26L36 25ZM34 34L42 33L44 32L46 31L48 34L56 33L57 34L56 35L48 34L45 38L45 42L44 42L44 38L42 35L36 34L34 35ZM33 42L36 40L38 39L38 40L36 42L34 43ZM39 22L40 20L48 21L49 22L48 24L46 24L44 26ZM49 38L50 37L52 37L55 40L55 42L54 43L52 43L51 42L51 40Z%22/><path fill=%22%23ff979a%22 fill-rule=%22evenodd%22 d=%22M6 34L8 33L16 34L18 32L16 30L16 28L16 30L18 32L16 34L8 35ZM7 20L10 19L14 20L8 21ZM9 24L16 23L17 24L16 25L10 25ZM13 44L20 38L25 42L24 43L20 38L14 45ZM24 12L32 11L39 12L32 13ZM24 50L30 49L38 50L30 51ZM29 34L30 33L34 32L32 30L32 28L32 30L34 32L33 34L34 36L36 35L42 36L43 42L42 43L41 42L42 38L40 37L38 39L36 39L34 36L30 37L29 36ZM39 18L40 17L42 17L47 18L42 19L40 19ZM47 32L54 29L56 29L57 30L57 32L56 33L48 33Z%22/><path fill=%22%23ffb5b7%22 fill-rule=%22evenodd%22 d=%22M8 34L16 33L18 34L16 35ZM18 12L26 11L33 12L26 13ZM23 42L24 41L26 43L28 43L29 44L28 45L26 45ZM24 36L26 35L28 36L30 34L32 34L34 35L38 36L39 38L38 39L36 37L34 37L32 35L30 35L28 36ZM29 50L36 49L45 50L36 51ZM31 30L34 27L36 30L38 29L39 30L38 31L36 30L34 29L32 31ZM39 18L46 17L54 18L46 19ZM45 36L46 35L47 36L47 42L46 43L45 42ZM49 32L52 31L54 30L56 29L56 32L56 34L54 33Z%22/><path fill=%22%23ff7477%22 fill-rule=%22evenodd%22 d=%22M-1 14L0 13L9 14L0 15ZM5 38L6 37L10 37L12 38L14 37L15 38L10 43L8 44L10 46L12 46L14 44L14 44L12 46L8 47L7 46L9 42L11 40L10 39L6 39ZM7 24L10 23L13 24L11 26L10 26L8 26ZM15 50L24 49L31 50L24 51ZM18 40L20 37L22 38L24 37L26 37L29 40L28 41L26 39L24 39L22 41L20 39ZM19 18L20 17L23 18L24 20L24 24L24 20L22 19L20 19ZM29 36L32 31L36 32L38 31L40 29L42 30L44 29L48 31L50 30L52 29L54 30L56 30L56 31L54 30L52 32L48 33L46 31L44 31L42 30L40 32L36 32L32 34L33 36L32 37L30 37ZM31 12L38 11L47 12L40 13ZM33 40L35 38L36 36L40 35L43 38L42 42L46 44L44 45L42 44L41 40L38 37L34 41ZM47 36L48 35L52 35L54 36L55 38L54 39L52 37L48 37ZM51 24L52 23L56 26L54 27L52 27L51 26ZM53 48L62 47L63 48L62 49Z%22/><path fill=%22%23ff1d23%22 fill-rule=%22evenodd%22 d=%22M-1 16L0 15L8 15L16 14L42 13L54 12L62 11L63 12L63 46L62 47L48 48L20 49L0 51L-1 50ZM5 34L6 33L16 33L17 32L16 31L8 31L7 30L7 20L8 19L16 19L17 20L17 24L16 25L13 26L16 27L18 29L19 22L19 18L20 17L24 18L25 20L23 32L24 33L28 32L30 32L31 30L31 28L32 27L34 27L36 26L33 24L32 22L36 16L40 17L54 16L56 17L57 18L57 20L53 24L57 26L57 34L55 38L57 42L56 44L52 44L50 42L48 38L47 40L47 44L46 45L42 45L41 44L40 40L38 44L36 45L26 45L24 44L23 42L20 39L12 47L8 47L6 46L7 44L11 40L10 39L6 39L5 38ZM27 38L28 37L34 37L35 38L33 40L32 42L30 42L29 40Z%22/></svg>',
+    'v2ex': 'data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2032%2032%22%3E%3Cpath%20fill=%22%23434343%22%20fill-rule=%22evenodd%22%20d=%22M7%208L18%207L25%2014L25%2017L18%2024L7%2023ZM7%2014L17%2014L19%2016L17%2018L7%2018Z%22/%3E%3C/svg%3E',
+    'weatheralarm': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%237bc259%22 fill-rule=%22evenodd%22 d=%22M25 58L26 57L28 57L30 55L32 55L36 51L38 51L39 50L39 48L43 44L43 42L45 40L45 28L39 22L40 21L42 21L51 30L51 34L53 36L53 42L51 44L51 48L49 50L49 52L42 59L40 59L38 61L36 61L34 63L30 63L28 61L26 61L25 60Z%22/><path fill=%22%23f6c049%22 fill-rule=%22evenodd%22 d=%22M25 18L30 13L32 13L34 11L48 11L50 13L52 13L57 18L57 20L61 24L61 28L63 30L63 38L58 43L56 43L55 42L55 34L53 32L53 28L42 17L38 17L36 15L34 15L32 17L28 17L26 19Z%22/><path fill=%22%235ea9eb%22 fill-rule=%22evenodd%22 d=%22M-1 36L2 33L12 43L14 43L16 45L32 45L40 37L41 38L41 42L30 53L26 53L24 55L20 55L18 53L12 53L10 51L8 51L-1 42Z%22/><path fill=%22%23d7534d%22 fill-rule=%22evenodd%22 d=%22M15 14L17 12L17 10L26 1L30 1L32 -1L46 -1L51 4L51 6L53 8L52 9L46 9L44 7L36 7L34 9L30 9L26 13L24 13L21 16L21 18L19 20L19 30L18 31L17 30L17 28L15 26Z%22/><path fill=%22%239f4ad4%22 fill-rule=%22evenodd%22 d=%22M3 14L5 12L5 8L9 4L9 2L10 1L18 1L19 2L17 4L17 6L13 10L13 16L11 18L11 24L13 26L13 30L15 32L15 34L20 39L24 39L25 40L24 41L16 41L14 39L12 39L5 32L5 30L3 28Z%22/></svg>',
+    'weibo': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23ff0000%22 fill-rule=%22evenodd%22 d=%22M-1 38L1 36L1 32L2 31L4 31L5 30L5 26L6 25L8 25L9 24L9 22L10 21L12 21L18 15L22 15L24 13L28 13L29 14L29 24L30 25L34 21L36 23L38 21L44 21L45 22L45 26L43 28L45 30L45 32L46 33L48 31L49 32L49 34L50 35L52 35L53 36L53 38L51 40L53 42L49 46L49 48L46 51L44 51L42 53L38 53L36 55L30 55L28 57L26 55L24 57L22 55L20 57L18 55L14 55L12 53L8 53L1 46L1 44L-1 42ZM3 42L5 40L5 38L7 36L7 34L8 33L10 33L14 29L18 29L20 27L28 27L30 29L32 27L34 29L36 29L38 31L40 31L41 32L41 34L45 38L43 40L43 44L36 51L34 51L32 53L14 53L12 51L8 51L7 50L7 46ZM49 8L50 7L53 10L52 11ZM57 18L60 15L61 16L59 18L61 20L60 21Z%22/><path fill=%22%23ffffff%22 fill-rule=%22evenodd%22 d=%22M7 36L8 35L10 35L11 34L11 32L12 31L16 31L18 29L34 29L36 31L38 31L41 34L41 36L43 38L43 42L41 44L41 46L40 47L38 47L34 51L30 51L28 53L18 53L16 51L14 51L10 47L8 47L7 46ZM13 38L18 33L30 33L31 34L31 36L33 38L33 46L30 49L28 49L26 51L18 51L13 46ZM17 44L20 41L22 41L23 42L20 45L18 45Z%22/><path fill=%22%23808080%22 fill-rule=%22evenodd%22 d=%22M1 40L2 39L5 42L4 43ZM3 28L4 27L5 28L5 30L4 31L3 30ZM7 30L14 23L15 24L8 31ZM11 20L14 17L15 18L12 21ZM17 20L20 17L21 18L19 20L21 22L20 23ZM17 26L18 25L20 27L22 27L23 28L22 29L20 29ZM17 50L18 49L20 49L21 50L20 51L18 51ZM23 18L26 15L27 16L24 19ZM23 24L26 21L27 22L24 25ZM23 50L24 49L26 49L27 50L26 51L24 51ZM35 22L36 21L39 24L36 27L35 26L37 24ZM43 34L46 31L47 32L44 35ZM43 46L44 45L47 48L46 49ZM45 42L48 39L49 40L46 43ZM47 36L50 33L52 33L53 34L52 35L50 35L48 37ZM49 46L52 43L53 44L50 47Z%22/><path fill=%22%23c0c0c0%22 fill-rule=%22evenodd%22 d=%22M5 38L6 37L7 38L7 44L6 45L5 44ZM7 48L8 47L10 47L14 51L16 51L17 52L16 53L14 53L12 51L10 51ZM17 46L18 45L20 45L22 43L23 44L20 47L18 47ZM23 28L24 27L28 27L29 28L28 29L24 29ZM29 22L30 21L32 21L33 22L32 23L30 23ZM29 48L32 45L33 46L30 49ZM29 52L30 51L32 51L33 52L32 53L30 53ZM35 50L38 47L39 48L36 51ZM43 18L44 17L46 17L47 18L46 19L44 19ZM45 24L46 23L47 24L47 26L46 27L45 26ZM53 38L54 37L55 38L55 40L54 41L53 40Z%22/><path fill=%22%23000000%22 fill-rule=%22evenodd%22 d=%22M13 40L18 35L20 35L22 33L26 33L28 35L30 35L33 38L33 42L31 44L31 46L28 49L24 49L22 51L20 49L18 49L13 44ZM17 42L20 39L23 42L23 46L22 47L18 47L17 46ZM23 40L24 39L26 39L27 40L26 41L24 41Z%22/><path fill=%22%23ffff00%22 fill-rule=%22evenodd%22 d=%22M41 10L43 8L43 6L44 5L45 6L45 8L46 9L50 5L55 10L55 12L54 13L53 12L53 10L52 9L50 11L48 9L46 11L44 9L42 11ZM47 16L48 15L49 16L49 18L48 19L47 18ZM49 22L52 19L53 20L53 22L50 25L49 24ZM55 16L57 14L57 12L58 11L59 12L59 16L61 18L59 20L60 21L62 21L63 22L62 23L60 23L59 24L59 28L58 29L57 28L57 24L59 22L57 20L59 18L58 17L56 17Z%22/></svg>',
+    'weread': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%2330abfe%22 fill-rule=%22evenodd%22 d=%22M-1 10L1 8L1 6L6 1L8 1L10 -1L52 -1L54 1L56 1L61 6L61 8L63 10L63 52L62 53L36 53L32 57L30 57L26 53L0 53L-1 52ZM41 36L46 31L54 31L59 36L59 42L56 45L54 45L52 47L44 47L43 46L43 44L41 42Z%22/><path fill=%22%23f6fbfe%22 fill-rule=%22evenodd%22 d=%22M1 54L2 53L22 53L24 55L26 55L30 59L32 59L36 55L38 55L40 53L60 53L61 54L61 56L56 61L54 61L52 63L10 63L8 61L6 61L1 56ZM41 38L43 36L43 34L44 33L48 33L50 31L52 33L56 33L57 34L57 36L59 38L57 40L57 42L54 45L46 45L43 42L43 40Z%22/><path fill=%22%23a2d6fe%22 fill-rule=%22evenodd%22 d=%22M43 44L44 43L47 46L46 47Z%22/><path fill=%22%23bae1fe%22 fill-rule=%22evenodd%22 d=%22M29 58L30 57L32 57L33 58L32 59L30 59Z%22/></svg>',
+    'xiaohongshu': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%23ff2741%22 fill-rule=%22evenodd%22 d=%22M-1 4L4 -1L58 -1L63 4L63 58L58 63L4 63L-1 58ZM3 26L4 25L8 25L9 26L9 36L10 37L11 36L11 22L12 21L14 21L15 22L15 40L14 41L10 41L8 39L6 39L3 36ZM17 26L18 25L20 25L22 27L23 26L23 24L26 21L40 21L42 23L44 21L52 21L54 23L56 21L58 21L59 22L59 26L58 27L56 27L55 28L56 29L58 29L59 30L59 40L58 41L52 41L51 40L51 38L53 36L53 34L52 33L50 33L49 34L49 40L48 41L46 41L45 40L45 34L44 33L42 33L41 32L41 30L42 29L44 29L45 28L44 27L40 27L39 28L39 36L40 37L42 37L43 38L43 40L42 41L22 41L20 39L18 39L17 38ZM21 30L22 29L23 30L23 32L22 33L21 32ZM29 32L31 30L31 28L32 27L33 28L33 36L32 37L31 36L31 34Z%22/><path fill=%22%23fffbfc%22 fill-rule=%22evenodd%22 d=%22M5 28L6 27L7 28L7 36L6 37L5 36ZM11 22L12 21L13 22L13 40L12 41L11 40ZM17 28L18 27L21 30L21 36L20 37L19 36L19 30ZM23 28L25 26L25 24L28 21L29 22L27 24L27 26L29 28L29 30L27 32L29 34L28 35L26 35L25 34L25 32L27 30L26 29L24 29ZM23 40L24 39L26 39L27 40L26 41L24 41ZM31 40L32 39L34 39L35 38L35 26L33 24L34 23L38 23L39 24L37 26L37 36L41 40L40 41L32 41ZM43 24L46 21L48 23L52 23L53 24L53 28L57 32L57 38L54 41L53 40L55 38L55 34L52 31L50 31L48 33L46 33L43 30L44 29L50 29L51 28L51 26L50 25L48 27L46 27Z%22/><path fill=%22%23ffe5e8%22 fill-rule=%22evenodd%22 d=%22M17 30L20 27L21 28L18 31ZM23 38L24 37L26 37L27 38L26 39L24 39ZM31 38L32 37L34 37L35 38L34 39L32 39ZM43 32L44 31L46 33L48 33L50 31L52 31L53 32L52 33L50 33L49 34L49 40L48 41L46 41L45 40L45 34ZM45 28L46 27L48 27L49 28L48 29L46 29Z%22/><path fill=%22%23ffd1d6%22 fill-rule=%22evenodd%22 d=%22M13 22L14 21L15 22L15 38L14 39L13 38ZM25 30L26 29L29 32L28 33Z%22/><path fill=%22%23ff697b%22 fill-rule=%22evenodd%22 d=%22M3 30L4 29L5 30L5 32L4 33L3 32ZM27 40L30 37L31 38L28 41ZM31 26L32 25L35 28L35 36L34 37L33 36L33 28ZM33 22L34 21L40 21L41 22L40 23L34 23ZM41 38L42 37L43 38L43 40L42 41L41 40ZM53 24L56 21L57 22L54 25Z%22/><path fill=%22%23ff8c99%22 fill-rule=%22evenodd%22 d=%22M3 34L4 33L5 34L5 36L4 37L3 36ZM7 32L8 31L9 32L9 34L8 35L7 34ZM17 26L18 25L20 25L21 26L20 27L18 27ZM17 36L18 35L23 40L22 41ZM23 34L24 33L26 35L28 35L30 33L31 34L28 37L26 37ZM27 24L28 23L30 25L32 23L33 24L30 27L28 27L27 26ZM37 28L38 27L39 28L39 36L38 37L37 36ZM51 38L52 37L53 38L53 40L52 41L51 40ZM53 28L56 25L57 26L54 29Z%22/><path fill=%22%23ff3c53%22 fill-rule=%22evenodd%22 d=%22M3 26L4 25L5 26L5 28L4 29L3 28ZM21 34L24 31L25 32L23 34L25 36L22 39L21 38ZM29 22L30 21L32 21L33 22L32 23L30 23ZM41 24L42 23L43 24L43 26L42 27L41 26ZM53 34L54 33L55 34L55 36L54 37L53 36Z%22/><path fill=%22%23ffb9c1%22 fill-rule=%22evenodd%22 d=%22M7 28L8 27L9 28L9 30L8 31L7 30ZM9 38L10 37L11 38L11 40L10 41L9 40ZM41 30L42 29L43 30L43 32L42 33L41 32ZM57 32L58 31L59 32L59 38L58 39L57 38Z%22/></svg>',
+    'zhihu': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%230067ff%22 fill-rule=%22evenodd%22 d=%22M-1 10L0 9L2 9L4 11L6 11L11 16L11 20L9 22L9 24L10 25L14 25L16 23L18 23L19 24L19 28L18 29L10 29L9 30L9 32L12 35L18 35L19 36L17 38L17 40L15 42L15 44L9 50L9 52L10 53L14 53L16 51L18 51L19 50L19 48L24 43L25 44L25 46L30 51L31 50L31 48L32 47L38 47L39 48L39 50L40 51L42 51L44 49L46 49L48 47L52 51L54 51L59 56L59 60L58 61L56 61L54 63L8 63L6 61L4 61L1 58L1 56L-1 54ZM25 34L26 33L32 33L33 34L33 44L32 45L31 44L31 42L25 36ZM39 42L40 41L42 41L43 42L42 43L40 43Z%22/><path fill=%22%230086ff%22 fill-rule=%22evenodd%22 d=%22M-1 8L1 6L1 4L4 1L6 1L8 -1L30 -1L32 1L34 1L35 2L35 4L40 9L42 9L45 12L44 13L36 13L34 15L32 15L30 13L20 13L19 12L19 10L18 9L16 9L13 12L13 16L12 17L6 11L4 11L2 9L0 9ZM11 34L12 33L18 33L19 34L18 35L12 35ZM13 24L18 19L19 20L19 22L18 23L16 23L14 25ZM25 20L26 19L32 19L33 20L33 28L32 29L26 29L25 28ZM39 20L40 19L46 19L47 20L47 30L49 32L49 42L48 43L44 43L42 41L40 41L39 40ZM49 48L50 47L52 47L53 46L53 20L54 19L58 23L60 23L63 26L63 54L61 56L61 58L60 59L59 58L59 56L54 51L52 51Z%22/><path fill=%22%23ffffff%22 fill-rule=%22evenodd%22 d=%22M11 22L13 20L13 16L15 14L15 12L18 9L19 10L17 12L17 14L18 15L30 15L31 16L30 17L26 17L23 20L23 28L26 31L30 31L31 32L30 33L24 33L23 34L23 38L21 40L21 42L19 44L19 46L14 51L13 50L15 48L15 46L17 44L17 42L19 40L19 36L21 34L20 33L12 33L11 32L12 31L18 31L21 28L21 18L20 17L18 17L12 23ZM25 40L26 39L29 42L29 44L31 46L31 48L30 49L29 48L29 46L25 42ZM35 16L36 15L52 15L53 16L53 46L52 47L44 47L42 49L40 49L38 47L36 47L35 46ZM37 20L40 17L48 17L49 18L49 42L48 43L46 43L44 45L42 45L40 43L38 43L37 42Z%22/><path fill=%22%2300a2ff%22 fill-rule=%22evenodd%22 d=%22M31 0L32 -1L54 -1L56 1L58 1L61 4L61 6L63 8L63 24L62 25L60 23L58 23L53 18L53 14L52 13L46 13L42 9L40 9L35 4L35 2L34 1L32 1ZM47 20L48 19L49 20L49 30L48 31L47 30Z%22/><path fill=%22%23bfdcff%22 fill-rule=%22evenodd%22 d=%22M15 20L18 17L19 18L16 21ZM23 20L26 17L30 17L31 18L30 19L26 19L25 20L25 28L24 29L23 28ZM37 20L40 17L48 17L49 18L48 19L40 19L39 20L39 42L38 43L37 42Z%22/><path fill=%22%2360a8ff%22 fill-rule=%22evenodd%22 d=%22M9 50L10 49L13 52L12 53ZM13 12L16 9L17 10L14 13ZM19 20L20 19L21 20L21 28L20 29L19 28ZM21 42L22 41L24 41L25 42L24 43L22 43ZM25 38L26 37L29 40L28 41ZM31 16L32 15L34 15L35 16L35 46L34 47L33 46L33 20L31 18Z%22/><path fill=%22%2340a7ff%22 fill-rule=%22evenodd%22 d=%22M9 22L10 21L11 22L11 24L10 25L9 24ZM19 14L20 13L30 13L31 14L30 15L20 15ZM23 34L24 33L25 34L25 36L24 37L23 36ZM35 14L36 13L52 13L53 14L52 15L36 15Z%22/><path fill=%22%23dfedff%22 fill-rule=%22evenodd%22 d=%22M11 50L14 47L15 48L12 51ZM13 30L14 29L18 29L19 30L18 31L14 31ZM25 30L26 29L30 29L33 32L32 33L30 31L26 31Z%22/></svg>',
+    'zhihu-daily': 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><path fill=%22%230699ce%22 fill-rule=%22evenodd%22 d=%22M-1 40L0 39L2 39L3 38L3 36L4 35L10 35L11 36L11 42L12 43L14 43L15 44L15 46L16 47L18 47L19 48L19 50L20 51L34 51L35 50L35 44L34 43L24 43L23 42L23 36L24 35L38 35L39 34L39 32L40 31L42 31L43 32L43 34L44 35L58 35L59 36L59 38L60 39L62 39L63 40L63 62L62 63L0 63L-1 62Z%22/><path fill=%22%2328b9f4%22 fill-rule=%22evenodd%22 d=%22M-1 8L0 7L2 7L3 6L3 4L4 3L58 3L59 4L59 6L60 7L62 7L63 8L63 38L62 39L60 39L59 38L59 36L58 35L52 35L51 34L51 20L50 19L48 19L47 18L47 16L46 15L44 15L43 14L43 12L42 11L20 11L19 12L19 14L18 15L16 15L15 16L15 18L14 19L12 19L11 20L11 34L10 35L4 35L3 36L3 38L2 39L0 39L-1 38ZM19 24L20 23L22 23L23 22L23 20L24 19L38 19L39 20L39 22L40 23L42 23L43 24L43 30L42 31L40 31L39 32L39 34L38 35L24 35L23 36L23 38L22 39L20 39L19 38Z%22/><path fill=%22%2367d1fd%22 fill-rule=%22evenodd%22 d=%22M-1 0L0 -1L62 -1L63 0L63 6L62 7L60 7L59 6L59 4L58 3L4 3L3 4L3 6L2 7L0 7L-1 6ZM11 20L12 19L14 19L15 20L15 22L14 23L12 23L11 22ZM11 40L12 39L14 39L15 40L15 42L14 43L12 43L11 42ZM19 12L20 11L22 11L23 12L23 14L22 15L20 15L19 14ZM31 44L32 43L34 43L35 44L35 46L34 47L32 47L31 46ZM39 12L40 11L42 11L43 12L43 14L42 15L40 15L39 14ZM47 20L48 19L50 19L51 20L51 22L50 23L48 23L47 22Z%22/><path fill=%22%23ecf9fe%22 fill-rule=%22evenodd%22 d=%22M11 28L12 27L14 27L15 26L15 20L16 19L18 19L19 18L19 16L20 15L26 15L27 14L27 12L28 11L34 11L35 12L35 14L36 15L42 15L43 16L43 18L44 19L46 19L47 20L47 22L46 23L44 23L43 22L43 20L42 19L36 19L35 18L35 16L34 15L28 15L27 16L27 18L26 19L20 19L19 20L19 26L18 27L16 27L15 28L15 34L14 35L12 35L11 34ZM15 40L16 39L18 39L19 40L19 42L20 43L22 43L23 44L23 46L22 47L20 47L19 46L19 44L18 43L16 43L15 42ZM27 48L28 47L30 47L31 48L31 50L30 51L28 51L27 50ZM47 28L48 27L50 27L51 28L51 30L50 31L48 31L47 30Z%22/><path fill=%22%23b1e3f8%22 fill-rule=%22evenodd%22 d=%22M11 36L12 35L14 35L15 34L15 28L16 27L18 27L19 28L19 34L18 35L16 35L15 36L15 38L14 39L12 39L11 38ZM15 16L16 15L18 15L19 16L19 18L20 19L22 19L23 20L23 22L22 23L20 23L19 22L19 20L18 19L16 19L15 18ZM19 40L20 39L22 39L23 40L23 42L22 43L20 43L19 42ZM23 48L24 47L26 47L27 46L27 44L28 43L30 43L31 44L31 46L32 47L34 47L35 48L35 50L34 51L32 51L31 50L31 48L30 47L28 47L27 48L27 50L26 51L24 51L23 50ZM27 16L28 15L34 15L35 16L35 18L34 19L28 19L27 18ZM39 20L40 19L42 19L43 18L43 16L44 15L46 15L47 16L47 18L46 19L44 19L43 20L43 22L42 23L40 23L39 22ZM43 28L44 27L46 27L47 28L47 30L46 31L44 31L43 30Z%22/><path fill=%22%23cceefa%22 fill-rule=%22evenodd%22 d=%22M11 24L12 23L14 23L15 24L15 26L14 27L12 27L11 26ZM15 36L16 35L18 35L19 36L19 38L18 39L16 39L15 38ZM23 12L24 11L26 11L27 12L27 14L26 15L24 15L23 14ZM23 44L24 43L26 43L27 44L27 46L26 47L24 47L23 46ZM35 12L36 11L38 11L39 12L39 14L38 15L36 15L35 14ZM43 24L44 23L50 23L51 24L51 26L50 27L44 27L43 26Z%22/><path fill=%22%2347b0dc%22 fill-rule=%22evenodd%22 d=%22M19 48L20 47L22 47L23 48L23 50L22 51L20 51L19 50ZM43 32L44 31L46 31L47 32L47 34L46 35L44 35L43 34Z%22/><path fill=%22%2384cfee%22 fill-rule=%22evenodd%22 d=%22M15 44L16 43L18 43L19 44L19 46L18 47L16 47L15 46ZM47 32L48 31L50 31L51 32L51 34L50 35L48 35L47 34Z%22/></svg>',
+  };
+/* ICON_MAP:END */
+var BRAND = {
+    weibo: ['#e6162d', '微'],        baidu: ['#2932e1', '百'],        zhihu: ['#0084ff', '知'],
+    bilibili: ['#00a1d6', 'B'],      toutiao: ['#f04142', '头'],      douyin: ['#161823', '抖'],
+    github: ['#24292f', 'GH'],       ithome: ['#d22222', 'IT'],       thepaper: ['#005bac', '澎'],
+    'qq-news': ['#1296db', '腾'],    'netease-news': ['#d7262d', '网'], sina: ['#e6162d', '新'],
+    'sina-news': ['#e6162d', '浪'],  huxiu: ['#ff5a00', '虎'],        ifanr: ['#ff6b35', '爱'],
+    kr36: ['#4285f4', '36'],         'zhihu-daily': ['#0084ff', '日'], xiaohongshu: ['#fe2c55', '小'],
+    kuaishou: ['#ff4906', '快'],     'douban-movie': ['#2e963d', '豆'], 'douban-group': ['#2e963d', '组'],
+    tieba: ['#3385ff', '贴'],        hupu: ['#d0312d', '扑'],         ngabbs: ['#c4a064', 'N'],
+    v2ex: ['#778087', 'V'],          pojie: ['#2e7d32', '吾'],        coolapk: ['#f7b500', '酷'],
+    juejin: ['#1e80ff', '掘'],       jianshu: ['#ea6f5a', '简'],      sspai: ['#d70000', '少'],
+    csdn: ['#fc5531', 'C'],          cto: ['#e60012', '51'],          nodeseek: ['#00a1d6', 'NS'],
+    hellogithub: ['#1296db', 'HG'],  acfun: ['#fd4c5d', 'A'],         lol: ['#0bc6e3', 'L'],
+    genshin: ['#4a90d9', '原'],      starrail: ['#6b5b95', '星'],     weread: ['#3a8ee6', '读'],
+    history: ['#8d6e63', '史'],      earthquake: ['#e53935', '震'],   weatheralarm: ['#0288d1', '警']
+  };
+  // 兼容 update.py 里「52pojie / 51cto / 36kr」这类 pkey 与徽标 key 的差异
+  var BRAND_ALIAS = { '52pojie': 'pojie', '51cto': 'cto', '36kr': 'kr36' };
+
+  function svgIcon(pkey, name) {
+    var key = BRAND_ALIAS[pkey] || pkey;
+    var cfg = BRAND[key] || ['#425AEF', String(name || '?').slice(0, 2)];
+    var color = cfg[0];
+    // 纯色圆角块，不含任何文字：平台名由板块标题承担，图标只作色标
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">' +
+      '<rect width="32" height="32" rx="7.5" fill="' + color + '"/>' +
+      '</svg>';
+    return 'data:image/svg+xml,' + encodeURIComponent(svg);
+  }
+
+  // 按设置的图标模式输出 <img>；favicon 模式失败时自动回退徽标，绝不留下空白
+  // 图标地址应由 iconUrl() 统一裁决，渲染点不要自己拼优先级
+  function iconUrl(p) {
+    if (settings.iconMode === 'favicon' && p.icon) return p.icon;
+    if (settings.iconMode !== 'badge') {
+      var d = ICON_MAP[p.pkey];
+      if (d) return d;                       // 内置源站 favicon（零外部请求）
+    }
+    return svgIcon(p.pkey, p.name);          // 兜底：品牌色圆角块，绝不留空白
+  }
+
+  function iconHtml(p) {
+    if (settings.iconMode === 'none') return '';
+    if (settings.iconMode === 'favicon' && p.icon) {
+      return '<img class="p-ico" src="' + esc(p.icon) + '" alt="" loading="lazy" referrerpolicy="no-referrer" ' +
+        'onerror="this.onerror=null;this.src=\'' + svgIcon(p.pkey, p.name) + '\'">';
+    }
+    return '<img class="p-ico" src="' + esc(iconUrl(p)) + '" alt="">';
+  }
+
+  function hotText(n) {
+    n = parseInt(n, 10) || 0;
+    if (n >= 1e8) return (n / 1e8).toFixed(1) + '亿';
+    if (n >= 1e4) return (n / 1e4).toFixed(1) + '万';
+    return n ? String(n) : '';
+  }
+  function ageText(ts) {
+    if (!ts) return '未知时间';
+    var s = Math.max(0, (Date.now() - ts) / 1000);
+    if (s < 90) return '刚刚';
+    if (s < 3600) return Math.round(s / 60) + ' 分钟前';
+    if (s < 86400) return Math.round(s / 3600) + ' 小时前';
+    return Math.round(s / 86400) + ' 天前';
+  }
+
+  // ============ 解析器（服务端数据结构 -> 统一条目） ============
+  function pick(o, keys) {
+    for (var i = 0; i < keys.length; i++) { if (o[keys[i]]) return o[keys[i]]; }
+    return '';
+  }
+  var PARSERS = {
+    viki: function (j) {
+      var arr = (j && j.data) || [], out = [];
+      for (var i = 0; i < arr.length; i++) {
+        var r = arr[i];
+        if (typeof r === 'string') { out.push(mk(i + 1, r, '', 0)); continue; }
+        var t = pick(r, ['title', 'word', 'name']);
+        if (!t) continue;
+        out.push(mk(i + 1, t, pick(r, ['url', 'link']), parseInt(r.hot_value || r.hot || 0, 10)));
+      }
+      return out;
+    },
+    weibo: function (j) {
+      var arr = (j && j.data && j.data.realtime) || [], out = [], n = 1;
+      for (var i = 0; i < arr.length; i++) {
+        var r = arr[i]; if (r.is_ad || !r.word) continue;
+        out.push(mk(n++, r.word, 'https://s.weibo.com/weibo?q=' + encodeURIComponent(r.word), r.num || 0));
+      }
+      return out;
+    },
+    baidu: function (j) {
+      var cards = (j && j.data && j.data.cards) || [], out = [], n = 1;
+      for (var a = 0; a < cards.length; a++) {
+        var cts = cards[a].content || [];
+        for (var b = 0; b < cts.length; b++) {
+          var inner = (cts[b] && cts[b].content) || [];
+          for (var c = 0; c < inner.length; c++) {
+            var it = inner[c] || {}; if (!it.word) continue;
+            out.push(mk(n++, it.word, it.url || it.rawUrl || ('https://www.baidu.com/s?wd=' + encodeURIComponent(it.word)), it.hotScore || 0));
+          }
+        }
+      }
+      return out;
+    },
+    bilibili: function (j) {
+      var arr = (j && j.data && j.data.list) || [], out = [];
+      for (var i = 0; i < arr.length; i++) {
+        var r = arr[i]; if (!r.title) continue;
+        out.push(mk(i + 1, r.title, 'https://www.bilibili.com/video/' + (r.bvid || ''), (r.stat && r.stat.view) || 0));
+      }
+      return out;
+    },
+    toutiao: function (j) {
+      var arr = (j && j.data) || [], out = [];
+      for (var i = 0; i < arr.length; i++) {
+        var r = arr[i]; if (!r.Title) continue;
+        var u = r.Url || '';
+        out.push(mk(i + 1, r.Title, u.indexOf('http') === 0 ? u : 'https://www.toutiao.com' + u, r.HotValue || 0));
+      }
+      return out;
+    },
+    douyin: function (j) {
+      var arr = (j && j.word_list) || [], out = [];
+      for (var i = 0; i < arr.length; i++) {
+        var r = arr[i]; if (!r.word) continue;
+        out.push(mk(i + 1, r.word, 'https://www.douyin.com/search/' + encodeURIComponent(r.word), r.hot_value || 0));
+      }
+      return out;
+    },
+    github: function (j) {
+      var arr = (j && j.items) || [], out = [];
+      for (var i = 0; i < arr.length; i++) {
+        var r = arr[i]; if (!r.full_name) continue;
+        var d = (r.description || '').trim(); if (d.length > 90) d = d.slice(0, 90) + '…';
+        out.push(mk(i + 1, d ? r.full_name + ' — ' + d : r.full_name, r.html_url, r.stargazers_count || 0));
+      }
+      return out;
+    },
+    uapis: function (j) {
+      var arr = (j && j.list) || [], out = [];
+      for (var i = 0; i < arr.length; i++) {
+        var r = arr[i]; if (!r.title) continue;
+        out.push(mk(r.index || i + 1, r.title, r.url || '', parseHot(r.hot_value)));
+      }
+      return out;
+    }
+  };
+  function mk(rank, title, url, hot) {
+    return { rank: rank, title: String(title).trim(), url: url || '', hot: parseInt(hot, 10) || 0 };
+  }
+  function parseHot(v) {
+    if (v == null) return 0;
+    if (typeof v === 'number') return v;
+    var m = String(v).match(/([\d.]+)\s*万/);
+    if (m) return Math.round(parseFloat(m[1]) * 1e4);
+    var n = String(v).replace(/\D/g, '');
+    return n ? parseInt(n, 10) : 0;
+  }
+
+  // ============================================================
+  //  默认板块顺序：改这里，任何电脑打开都一样
+  // ------------------------------------------------------------
+  //  为什么需要它：排序原本有「快照顺序 → localStorage 本机覆盖」两层，
+  //  谁在谁机器上拖过，那台机器就永久记住自己的顺序。要让所有人看到同一份，
+  //  必须有个写在页面里的基准 —— 这就是 DEFAULT_ORDER。
+  //
+  //  怎么用：
+  //   1. 等号后面按你想要的先后写 pkey（下面注释里的是平台名，方便认）
+  //   2. 把 ORDER_VERSION 加 1 —— 这是关键一步：已经存了旧顺序的浏览器
+  //      看到版本号变了才会重新拉取这份默认顺序，否则它们仍用自己的旧数据
+  //   3. 不想手抄？设置弹窗里「复制当前排序」会生成这段数组，粘过来即可
+  //
+  //  不在列表里的平台会自动排到末尾（比如以后新增的），不会丢。
+  // ============================================================
+  /* DEFAULT_ORDER:BEGIN */
+    var DEFAULT_ORDER = [
+    'hellogithub',          // HelloGitHub
+    'github',          // GitHub 趋势
+    'douyin',          // 抖音热点
+    'baidu',          // 百度热搜
+    'zhihu',          // 知乎热榜
+    'toutiao',          // 今日头条
+    '52pojie',          // 吾爱破解
+    'bilibili',          // 哔哩哔哩
+    'qq-news',          // 腾讯新闻
+    'netease-news',          // 网易新闻
+    'thepaper',          // 澎湃新闻
+    'sina-news',          // 新浪新闻
+    'ithome',          // IT之家
+    'ifanr',          // 爱范儿
+    '36kr',          // 36氪
+    'weibo',          // 微博热搜
+    'sina',          // 新浪热搜
+    'huxiu',          // 虎嗅
+    'zhihu-daily',          // 知乎日报
+    'xiaohongshu',          // 小红书
+    'kuaishou',          // 快手
+    'douban-movie',          // 豆瓣电影
+    'douban-group',          // 豆瓣小组
+    'tieba',          // 百度贴吧
+    'hupu',          // 虎扑
+    'ngabbs',          // NGA论坛
+    'v2ex',          // V2EX
+    'coolapk',          // 酷安
+    'juejin',          // 掘金
+    'jianshu',          // 简书
+    'sspai',          // 少数派
+    'csdn',          // CSDN
+    '51cto',          // 51CTO
+    'nodeseek',          // NodeSeek
+    'acfun',          // A站
+    'weread',          // 微信读书
+    'history',          // 历史上的今天
+    'genshin',          // 原神
+    'lol',          // 英雄联盟
+    'starrail',          // 星穹铁道
+    'weatheralarm',          // 天气预警
+    'earthquake',          // 地震速报
+    'netease-music',          // 网易云音乐
+    'qq-music',          // QQ音乐
+    'smzdm',          // 什么值得买
+    'tencent-news',          // 腾讯要闻
+  ];
+  var ORDER_VERSION = 2;
+  /* DEFAULT_ORDER:END */
+
+  // ============ 状态 ============
+  var SNAP = window.__HOT_DATA__ || null;
+  var PLATFORMS = (SNAP && SNAP.platforms) || [];
+  var DATA = {};            // pkey -> {items, ts, live}
+  var settings = loadSettings();
+  var timer = null, ticker = null, running = false, lastAttempt = 0;
+
+  function loadSettings() {
+    var def = { order: [], hidden: [], theme: 'light', limit: 10, interval: 10,
+                auto: true, proxy: '', iconMode: 'auto', orderVersion: 0 };
+    try {
+      var raw = localStorage.getItem(STORE);
+      if (!raw) return def;
+      var s = JSON.parse(raw) || {};
+      return {
+        order: Array.isArray(s.order) ? s.order : def.order,
+        hidden: Array.isArray(s.hidden) ? s.hidden : def.hidden,
+        theme: s.theme === 'dark' ? 'dark' : 'light',
+        limit: [10, 15, 20, 50].indexOf(s.limit) > -1 ? s.limit : def.limit,
+        interval: [5, 10, 30, 60].indexOf(s.interval) > -1 ? s.interval : def.interval,
+        auto: s.auto !== false,
+        proxy: typeof s.proxy === 'string' ? s.proxy.trim() : '',
+        iconMode: ['auto', 'badge', 'favicon', 'none'].indexOf(s.iconMode) > -1 ? s.iconMode : 'auto',
+        orderVersion: typeof s.orderVersion === 'number' ? s.orderVersion : def.orderVersion
+      };
+    } catch (e) { return def; }
+  }
+  function saveSettings() {
+    try { localStorage.setItem(STORE, JSON.stringify(settings)); } catch (e) {}
+  }
+  function loadCache() {
+    try {
+      var raw = localStorage.getItem(CACHE);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
+  function saveCache() {
+    try {
+      localStorage.setItem(CACHE, JSON.stringify({
+        ts: Date.now(), platforms: PLATFORMS.map(function (p) {
+          var d = DATA[p.pkey] || {};
+          return { pkey: p.pkey, name: p.name, icon: p.icon, items: d.items || p.items || [] };
+        })
+      }));
+    } catch (e) {}
+  }
+
+  // ============ 默认顺序的应用时机 ============
+  // 只在三种情况下把 DEFAULT_ORDER 写进本机存档：
+  //   ① 从没存过（首次打开 / 新电脑）
+  //   ② ORDER_VERSION 变了（作者改了默认顺序，要推给所有人）
+  //   ③ 用户在设置里点了「恢复默认排序」
+  // 其余时候尊重本机已存的排序，不打扰。
+  function buildDefaultOrder() {
+    var byKey = {}, seen = {}, out = [];
+    PLATFORMS.forEach(function (p) { byKey[p.pkey] = 1; });
+    DEFAULT_ORDER.forEach(function (k) {
+      if (byKey[k] && !seen[k]) { out.push(k); seen[k] = 1; }
+    });
+    // 快照里有、但 DEFAULT_ORDER 没写的新平台，接在末尾，不会被丢掉
+    PLATFORMS.forEach(function (p) {
+      if (!seen[p.pkey]) { out.push(p.pkey); seen[p.pkey] = 1; }
+    });
+    return out;
+  }
+  function applyDefaultOrder(force) {
+    if (force || !settings.order.length || settings.orderVersion !== ORDER_VERSION) {
+      settings.order = buildDefaultOrder();
+      settings.orderVersion = ORDER_VERSION;
+      saveSettings();
+    }
+  }
+
+  // ============ 初始化数据源优先级：缓存 > 快照 ============
+  (function bootstrap() {
+    var snapTs = SNAP && SNAP.updated_ts ? SNAP.updated_ts * 1000 : 0;
+    var cache = loadCache();
+    PLATFORMS.forEach(function (p) {
+      DATA[p.pkey] = { items: p.items || [], ts: snapTs, live: false };
+    });
+    // 缓存比快照新时优先用缓存（<｜hy_place▁holder▁no▁813｜>端的实时结果通常比 update.py 快照更新）
+    if (cache && cache.ts > snapTs && cache.platforms) {
+      cache.platforms.forEach(function (p) {
+        if (p.items && p.items.length && DATA[p.pkey]) {
+          DATA[p.pkey] = { items: p.items, ts: cache.ts, live: true };
+        }
+      });
+    }
+    applyDefaultOrder();
+  })();
+
+  // ============ 渲染 ============
+  var grid = document.getElementById('grid');
+
+  function render() {
+    var order = settings.order.slice(), seen = {}, seq = [], byKey = {};
+    PLATFORMS.forEach(function (p) { byKey[p.pkey] = p; });
+    order.forEach(function (k) { if (byKey[k] && !seen[k]) { seq.push(byKey[k]); seen[k] = 1; } });
+    PLATFORMS.forEach(function (p) { if (!seen[p.pkey]) { seq.push(p); seen[p.pkey] = 1; } });
+
+    var html = '';
+    seq.forEach(function (p) {
+      var d = DATA[p.pkey] || { items: [] };
+      var items = d.items.slice(0, settings.limit);
+      html += '<section class="board" data-pkey="' + esc(p.pkey) + '">' +
+        '<div class="board-head"><h2>' + iconHtml(p) +
+        '<span>' + esc(p.name) + '</span></h2>' +
+        '<span class="more-btn" data-more="' + esc(p.pkey) + '">更多 ›</span></div>';
+      if (!items.length) {
+        html += '<ol class="list"><li class="empty">暂无数据</li></ol>';
+      } else {
+        html += '<ol class="list">' + items.map(function (it) { return itemHtml(it); }).join('') + '</ol>';
+      }
+      html += '</section>';
+    });
+    grid.innerHTML = html;
+    applyVisibility();
+    bindBoardEvents();
+    applySearch();
+  }
+  function itemHtml(it) {
+    var cls = it.rank <= 3 ? ' rank-' + it.rank : '';
+    var h = hotText(it.hot);
+    return '<li class="item"><span class="rank' + cls + '">' + (it.rank || '') + '</span>' +
+      (it.url
+        ? '<a class="title" href="' + esc(it.url) + '" target="_blank" rel="noopener">' + esc(it.title) + '</a>'
+        : '<span class="title" style="cursor:default">' + esc(it.title) + '</span>') +
+      (h ? '<span class="hot">' + h + '</span>' : '') + '</li>';
+  }
+  function applyVisibility() {
+    var hidden = {};
+    settings.hidden.forEach(function (k) { hidden[k] = 1; });
+    Array.prototype.forEach.call(grid.children, function (el) {
+      el.classList.toggle('p-hidden', !!hidden[el.getAttribute('data-pkey')]);
+    });
+  }
+  function bindBoardEvents() {
+    Array.prototype.forEach.call(grid.querySelectorAll('[data-more]'), function (el) {
+      el.addEventListener('click', function () { openDetail(el.getAttribute('data-more')); });
+    });
+  }
+
+  function updateStatus(extra) {
+    var dot = document.getElementById('statusDot');
+    var txt = document.getElementById('statusText');
+    var newest = 0, liveCount = 0;
+    PLATFORMS.forEach(function (p) {
+      var d = DATA[p.pkey]; if (!d) return;
+      if (d.ts > newest) newest = d.ts;
+      if (d.live) liveCount++;
+    });
+    var ageMin = (Date.now() - newest) / 60000;
+    dot.className = 'pulse' + (running ? ' busy' : ageMin > 180 ? ' err' : ageMin > 45 ? ' warn' : '');
+    var src = liveCount ? '实时 ' + liveCount + ' 个 · ' : '';
+    txt.textContent = running ? '正在更新…' : (src + ageText(newest) + (extra ? ' · ' + extra : ''));
+  }
+
+  // ============ 抓取 ============
+  function fetchJSON(url, timeout) {
+    return new Promise(function (resolve, reject) {
+      var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      var to = setTimeout(function () {
+        if (ctl) ctl.abort();
+        reject(new Error('timeout'));
+      }, timeout || 12000);
+      fetch(url, ctl ? { signal: ctl.signal } : undefined)
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function (j) { clearTimeout(to); resolve(j); })
+        .catch(function (e) { clearTimeout(to); reject(e); });
+    });
+  }
+
+  // 单个平台：依次尝试候选源，取第一个成功的结果
+  function fetchPlatform(pkey) {
+    var srcs = getSources(pkey);
+    if (!srcs || !srcs.length) return Promise.resolve(null);
+    var usable = srcs.filter(function (s) { return s.cors || settings.proxy; });
+    if (!usable.length) return Promise.resolve(null);
+
+    var chain = usable.reduce(function (prev, s) {
+      return prev.catch(function () {
+        var target = s.cors ? s.url : settings.proxy.replace(/\s*$/, '') + encodeURIComponent(s.url);
+        return fetchJSON(target).then(function (j) {
+          var items = (PARSERS[s.p] || function () { return []; })(j);
+          if (!items.length) throw new Error('empty');
+          return { items: items, via: s.t };
+        });
+      });
+    }, Promise.reject(new Error('init')));
+
+    return chain.catch(function () { return null; });
+  }
+
+  function refreshAll(manual) {
+    if (running) return Promise.resolve();
+    running = true;
+    updateStatus();
+    var btn = document.getElementById('refreshBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '更新中…'; }
+
+    var keys = PLATFORMS.map(function (p) { return p.pkey; });
+    var idx = 0, okCount = 0;
+    function step() {
+      if (idx >= keys.length) return Promise.resolve();
+      var k = keys[idx++];
+      return fetchPlatform(k).then(function (res) {
+        if (res && res.items.length) {
+          DATA[k] = { items: res.items, ts: Date.now(), live: true };
+          okCount++;
+        }
+      }).then(step);
+    }
+    // 并发 4
+    var workers = [step(), step(), step(), step()];
+    return Promise.all(workers).then(function () {
+      running = false;
+      lastAttempt = Date.now();
+      if (okCount) {
+        saveCache();
+        render();
+      }
+      updateStatus(okCount ? '本次更新 ' + okCount + ' 个' : (usableCount() ? '本次无更新' : '未配置代理'));
+      if (btn) { btn.disabled = false; btn.textContent = '↻ 刷新'; }
+      if (manual && okCount === 0) {
+        alert('没有拉到新数据。\n\n原因通常是：目标接口不通，或尚未配置 CORS 代理。\n' +
+          '请到「设置」填写代理前缀后重试（可用附带的 proxy-worker.js 自建）。');
+      }
+    });
+  }
+  function usableCount() {
+    return PLATFORMS.filter(function (p) {
+      var s = getSources(p.pkey);
+      return s && s.some(function (x) { return x.cors || settings.proxy; });
+    }).length;
+  }
+
+  // ============ 自动更新调度 ============
+  function scheduleAuto() {
+    if (ticker) clearInterval(ticker);
+    if (ticker2) clearInterval(ticker2);
+    if (timer) clearTimeout(timer);
+    if (!settings.auto) return;
+    var ms = Math.max(1, settings.interval) * 60000;
+    timer = setTimeout(function () {
+      if (!document.hidden) refreshAll(false);
+      scheduleAuto();
+    }, ms);
+    ticker = setInterval(updateStatus, 30000);
+    ticker2 = setInterval(function () {}, 1000);
+  }
+  var ticker2 = null;
+
+  // ============ 详情弹窗 ============
+  function openDetail(pkey) {
+    var p = null;
+    PLATFORMS.forEach(function (x) { if (x.pkey === pkey) p = x; });
+    if (!p) return;
+    var d = DATA[pkey] || { items: [] };
+    document.getElementById('detailTitle').textContent = p.name + ' · ' + d.items.length + ' 条';
+    var ic = document.getElementById('detailIcon');
+    ic.src = iconUrl(p);
+    ic.style.display = settings.iconMode === 'none' ? 'none' : '';
+    ic.onerror = function () { this.onerror = null; this.src = svgIcon(p.pkey, p.name); };
+    document.getElementById('detailList').innerHTML =
+      d.items.map(function (it) { return itemHtml(it); }).join('') ||
+      '<li class="empty">暂无数据</li>';
+    document.getElementById('detailModal').hidden = false;
+  }
+
+  // ============ 搜索 ============
+  var searchVal = '';
+  function applySearch() {
+    var q = searchVal.trim().toLowerCase();
+    Array.prototype.forEach.call(grid.children, function (board) {
+      if (!q) { board.style.display = ''; }
+      var items = board.querySelectorAll('.item'), any = false;
+      Array.prototype.forEach.call(items, function (li) {
+        var t = (li.querySelector('.title').textContent || '').toLowerCase();
+        var okHit = !q || t.indexOf(q) > -1;
+        li.style.display = okHit ? '' : 'none';
+        if (okHit && q) any = true;
+      });
+      if (q) board.style.display = any ? '' : 'none';
+    });
+  }
+
+  // ============ 设置面板 ============
+  var listEl = document.getElementById('platList');
+  var orderFilterEl = document.getElementById('orderFilter');
+  var orderFilter = '';
+  function buildList() {
+    var byKey = {}, seq = [];
+    PLATFORMS.forEach(function (p) { byKey[p.pkey] = p; });
+    settings.order.forEach(function (k) { if (byKey[k]) { seq.push(byKey[k]); delete byKey[k]; } });
+    PLATFORMS.forEach(function (p) { if (byKey[p.pkey]) seq.push(p); });
+    var q = orderFilter.trim().toLowerCase();
+    var view = seq.filter(function (p) {
+      return !q || p.name.toLowerCase().indexOf(q) > -1 || p.pkey.toLowerCase().indexOf(q) > -1;
+    });
+    listEl.innerHTML = view.map(function (p) {
+      var on = settings.hidden.indexOf(p.pkey) === -1;
+      var ri = seq.indexOf(p);
+      var first = ri === 0, last = ri === seq.length - 1;
+      return '<li class="plat-item" draggable="true" data-pkey="' + esc(p.pkey) + '">' +
+        '<span class="drag">⠿</span>' + iconHtml(p) +
+        '<span class="p-name">' + esc(p.name) + '</span>' +
+        '<span class="p-actions">' +
+          '<button class="mv" data-act="top" title="置顶"' + (first ? ' disabled' : '') + '>⏫</button>' +
+          '<button class="mv" data-act="up" title="上移"' + (first ? ' disabled' : '') + '>↑</button>' +
+          '<button class="mv" data-act="down" title="下移"' + (last ? ' disabled' : '') + '>↓</button>' +
+          '<button class="mv" data-act="bottom" title="置底"' + (last ? ' disabled' : '') + '>⏬</button>' +
+        '</span>' +
+        '<label class="switch"><input type="checkbox"' + (on ? ' checked' : '') + '><span class="slider"></span></label>' +
+        '</li>';
+    }).join('');
+    bindDrag();
+  }
+  // 在完整顺序里移动某板块：top=置顶 up=上移 down=下移 bottom=置底
+  function moveItem(key, act) {
+    var arr = settings.order.slice();
+    var i = arr.indexOf(key);
+    if (i === -1) return;
+    var j;
+    if (act === 'top') j = 0;
+    else if (act === 'bottom') j = arr.length - 1;
+    else if (act === 'up') j = i - 1;
+    else if (act === 'down') j = i + 1;
+    else return;
+    if (j < 0 || j >= arr.length || j === i) return;
+    arr.splice(i, 1); arr.splice(j, 0, key);
+    settings.order = arr;
+    saveSettings(); buildList(); render();
+  }
+  // 按钮用事件委托：buildList 每次重建 innerHTML，委托只绑一次避免重复绑定
+  listEl.addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest ? e.target.closest('.mv') : null;
+    if (!btn) return;
+    var li = btn.closest('.plat-item');
+    if (!li) return;
+    moveItem(li.getAttribute('data-pkey'), btn.getAttribute('data-act'));
+  });
+  orderFilterEl.addEventListener('input', function () { orderFilter = orderFilterEl.value; buildList(); });
+  var dragKey = null;
+  function bindDrag() {
+    Array.prototype.forEach.call(listEl.querySelectorAll('.plat-item'), function (li) {
+      li.addEventListener('dragstart', function () { dragKey = li.getAttribute('data-pkey'); li.classList.add('dragging'); });
+      li.addEventListener('dragend', function () { li.classList.remove('dragging'); dragKey = null; });
+      li.addEventListener('dragover', function (e) { e.preventDefault(); li.classList.add('drag-over'); });
+      li.addEventListener('dragleave', function () { li.classList.remove('drag-over'); });
+      li.addEventListener('drop', function (e) {
+        e.preventDefault();
+        li.classList.remove('drag-over');
+        var tk = li.getAttribute('data-pkey');
+        if (!dragKey || dragKey === tk) return;
+        var arr = settings.order.slice(), from = arr.indexOf(dragKey), to = arr.indexOf(tk);
+        if (from === -1) arr.splice(to, 0, dragKey);
+        else { arr.splice(from, 1); arr.splice(to, 0, dragKey); }
+        settings.order = arr; saveSettings(); buildList(); render();
+      });
+      var cb = li.querySelector('input[type=checkbox]');
+      cb.addEventListener('change', function () {
+        var k = li.getAttribute('data-pkey'), i = settings.hidden.indexOf(k);
+        if (cb.checked && i > -1) settings.hidden.splice(i, 1);
+        if (!cb.checked && i === -1) settings.hidden.push(k);
+        saveSettings(); applyVisibility(); applySearch();
+      });
+    });
+  }
+
+  // ============ 事件绑定 ============
+  document.documentElement.setAttribute('data-theme', settings.theme);
+  var themeToggle = document.getElementById('themeToggle');
+  themeToggle.checked = settings.theme === 'dark';
+  themeToggle.addEventListener('change', function () {
+    settings.theme = themeToggle.checked ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', settings.theme);
+    saveSettings();
+  });
+
+  var intervalSel = document.getElementById('intervalSel');
+  intervalSel.value = String(settings.interval);
+  intervalSel.addEventListener('change', function () {
+    settings.interval = parseInt(intervalSel.value, 10) || 10;
+    saveSettings(); scheduleAuto(); updateStatus();
+  });
+
+  var limitSel = document.getElementById('limitSel');
+  limitSel.value = String(settings.limit);
+  limitSel.addEventListener('change', function () {
+    settings.limit = parseInt(limitSel.value, 10) || 10;
+    saveSettings(); render(); updateStatus();
+  });
+
+  var iconSel = document.getElementById('iconSel');
+  iconSel.value = settings.iconMode;
+  iconSel.addEventListener('change', function () {
+    settings.iconMode = iconSel.value;
+    saveSettings(); render(); buildList();
+  });
+
+  var proxyInput = document.getElementById('proxyInput');
+  proxyInput.value = settings.proxy;
+  proxyInput.addEventListener('change', function () {
+    settings.proxy = proxyInput.value.trim(); saveSettings();
+  });
+
+  var autoToggle = document.getElementById('autoToggle');
+  autoToggle.checked = settings.auto;
+  autoToggle.addEventListener('change', function () {
+    settings.auto = autoToggle.checked; saveSettings(); scheduleAuto(); updateStatus();
+  });
+
+  document.getElementById('refreshBtn').addEventListener('click', function () { refreshAll(true); });
+  document.getElementById('settingsBtn').addEventListener('click', function () {
+    buildList(); document.getElementById('settingsModal').hidden = false;
+  });
+  document.getElementById('settingsDone').addEventListener('click', function () {
+    document.getElementById('settingsModal').hidden = true; saveSettings();
+  });
+  document.getElementById('resetBtn').addEventListener('click', function () {
+    if (!confirm('确定重置本机设置（顺序 / 显隐 / 主题 / 代理）？')) return;
+    localStorage.removeItem(STORE); localStorage.removeItem(CACHE); location.reload();
+  });
+  document.getElementById('testBtn').addEventListener('click', function () {
+    var btn = this; btn.disabled = true; btn.textContent = '测试中…';
+    var target = getSources('zhihu')[0].url;
+    var url = settings.proxy ? settings.proxy.replace(/\s*$/, '') + encodeURIComponent(target) : target;
+    fetchJSON(url, 15000).then(function () {
+      alert('代理可用 ✓\n\n已能跨域取到 uapis.cn 的数据，所有平台都会实时更新。');
+    }).catch(function (e) {
+      alert('不可用：' + e.message + '\n\n检查代理前缀是否以 "?url=" 结尾，或该代理服务是否可达。');
+    }).then(function () { btn.disabled = false; btn.textContent = '测试代理'; });
+  });
+
+  // ---------- 默认排序：恢复 / 导出 ----------
+  var orderTip = document.getElementById('orderTip');
+  var orderTipHtml = orderTip.innerHTML;
+  var orderTipTimer = null;
+  function flashTip(html, keep) {
+    clearTimeout(orderTipTimer);
+    orderTip.innerHTML = html;
+    orderTip.style.color = 'var(--theme)';
+    if (!keep) {
+      orderTipTimer = setTimeout(function () {
+        orderTip.innerHTML = orderTipHtml; orderTip.style.color = '';
+      }, 6000);
+    }
+  }
+  document.getElementById('resetOrderBtn').addEventListener('click', function () {
+    applyDefaultOrder(true);
+    buildList(); render();
+    flashTip('已按页面里的 DEFAULT_ORDER 重排（共 ' + settings.order.length + ' 个板块）。');
+  });
+  document.getElementById('copyOrderBtn').addEventListener('click', function () {
+    var lines = settings.order.map(function (k) {
+      var name = '';
+      PLATFORMS.forEach(function (x) { if (x.pkey === k) name = x.name; });
+      // 名字可能含空格/中文，但这里是 JS 注释不是字符串字面量，直接拼即可
+      return "    '" + k + "'," + (name ? '          // ' + name : '');
+    });
+    var text = '  var DEFAULT_ORDER = [\n' + lines.join('\n') + '\n  ];';
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.top = '-9999px';
+      document.body.appendChild(ta); ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+      return ok;
+    }
+    function done(ok) {
+      if (ok) flashTip('已复制 ' + settings.order.length + ' 个板块的顺序 —— 粘贴进 index.html 的 ' +
+                       'DEFAULT_ORDER，记得把 ORDER_VERSION 加 1。');
+      else prompt('浏览器不允许自动复制，请手动全选复制：', text);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); },
+                                               function () { done(fallback()); });
+    } else done(fallback());
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('[data-close]'), function (el) {
+    el.addEventListener('click', function () {
+      document.getElementById(el.getAttribute('data-close')).hidden = true;
+    });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.modal-mask'), function (el) {
+    el.addEventListener('click', function () { el.parentNode.hidden = true; });
+  });
+
+  document.getElementById('searchInput').addEventListener('input', function () {
+    searchVal = this.value; applySearch();
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      document.getElementById('detailModal').hidden = true;
+      document.getElementById('settingsModal').hidden = true;
+    }
+  });
+
+  // 页面回到前台且已过期时自动补一次
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && settings.auto && Date.now() - lastAttempt > settings.interval * 60000) {
+      refreshAll(false);
+    }
+  });
+
+  // 启动
+  render();
+  updateStatus();
+  if (PLATFORMS.length) refreshAll(false);   // 打开即尝试更新一次（无需等待定时器）
+  scheduleAuto();
+})();
+</script>
+</body>
+</html>
